@@ -1,0 +1,274 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<sdf version='1.7'>
+  <world name='warehouse_unified'>
+
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin name="gz::sim::systems::Physics" filename="gz-sim-physics-system" />
+    <plugin name="gz::sim::systems::UserCommands" filename="gz-sim-user-commands-system" />
+    <plugin name="gz::sim::systems::SceneBroadcaster" filename="gz-sim-scene-broadcaster-system" />
+    <plugin name="gz::sim::systems::Contact" filename="gz-sim-contact-system" />
+
+    <scene>
+      <ambient>0.6 0.6 0.7 1.0</ambient>
+      <background>0.5 0.55 0.6 1.0</background>
+      <shadows>0</shadows>
+      <grid>false</grid>
+      <sky><clouds><speed>12</speed></clouds></sky>
+    </scene>
+
+    <light type='directional' name='sun'>
+      <cast_shadows>0</cast_shadows>
+      <pose>0 0 100 0 0 0</pose>
+      <diffuse>0.9 0.9 0.95 1</diffuse>
+      <specular>0.5 0.5 0.5 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <light type='point' name='warehouse_light'>
+      <pose>0 0 8 0 0 0</pose>
+      <diffuse>0.4 0.4 0.45 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>50</range><constant>0.5</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <cast_shadows>0</cast_shadows>
+    </light>
+
+    <model name='ground_plane'>
+      <static>true</static>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry><plane><normal>0.0 0.0 1.0</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry><plane><normal>0.0 0.0 1.0</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.5 0.5 0.5 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+        </visual>
+      </link>
+      <pose>0 0 -0.02 0 0 0</pose>
+    </model>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Warehouse</uri>
+      <name>warehouse</name>
+      <pose>0 0 -0.1 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf_big</uri>
+      <name>shelf_big_0</name>
+      <pose>-8.5 -13 0 0 -0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf_big</uri>
+      <name>shelf_big_1</name>
+      <pose>6.5 -13 0 0 -0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf_big</uri>
+      <name>shelf_big_2</name>
+      <pose>-1.5 -13 0 0 -0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf</uri>
+      <name>shelf_3</name>
+      <pose>13.5 4.5 0 0 -0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf</uri>
+      <name>shelf_4</name>
+      <pose>10 4.5 0 0 -0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/MovAi/models/shelf_big</uri>
+      <name>shelf_big_3</name>
+      <pose>3.5 9.5 0 0 0 1.57</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Jersey Barrier</uri>
+      <name>barrier_0</name>
+      <pose>-10.4 14.75 0 0 0 1.57</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Jersey Barrier</uri>
+      <name>barrier_1</name>
+      <pose>-10.4 10.5 0 0 0 1.57</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Jersey Barrier</uri>
+      <name>barrier_2</name>
+      <pose>-10.4 6.5 0 0 0 1.57</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/CoffeeTable</uri>
+      <name>conversation_table</name>
+      <pose>1.5 5 0 0 0 0</pose>
+      <static>true</static>
+    </include>
+
+    <!-- ================================================================ -->
+    <!-- ACTORES ANIMADOS LOCALES (4 clases visuales para YOLO)          -->
+    <!-- ================================================================ -->
+
+    <!-- Clase 1: Mingfei (Verde) - OBJETIVO (origen pelvis, Z=1.0).
+         Mapa real del SDF (el usuario describe direcciones DESDE el robot): su NORTE = +x
+         (alejarse del robot), SUR = -x (hacia el robot), ESTE = -y, OESTE = +y.
+         Recorrido pedido:
+           1) mira al dron (SUR / -x)  2) mira al NORTE (+x)
+           3) CAMINO LARGO al norte (+x) por y=2 cruzando el cruce problematico (demuestra que
+              el multi-object tracking esta resuelto)
+           4) giro dcha -> ESTE (-y) y camino   5) giro dcha -> SUR (-x) y camino
+           6) giro dcha -> OESTE (+y) y camino   7) giro dcha -> NORTE (+x) y camino
+           8) repite el cuadrado (pasos 4-7).  -> es un cuadrado HORARIO (4 giros a la derecha).
+         Yaw SDF de los giros a la derecha: +x(0) -> -y(-1.57) -> -x(-3.14) -> +y(-4.71) -> +x.
+         CLEARANCES A VERIFICAR EN GLM: corredor y=2 y cuadrado GRANDE x[4,12] y[-3,2] (8x5 m)
+         vs shelf_4 (10,4.5)/shelf_3 (13.5,4.5) al norte y pared este (x=12); nº de vueltas al
+         cuadrado antes de reiniciar. -->
+    <actor name="actor_0">
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <!-- Pasos 1-2: acercarse de frente, fijado (~19s quieto), mirar al dron (SUR/-x) y al NORTE (+x) -->
+          <waypoint><time>0</time><pose>5 2 1.0 0 0 3.14</pose></waypoint>
+          <waypoint><time>6</time><pose>1 2 1.0 0 0 3.14</pose></waypoint>
+          <waypoint><time>27</time><pose>1 2 1.0 0 0 3.14</pose></waypoint>
+          <waypoint><time>29</time><pose>1 2 1.0 0 0 0</pose></waypoint>
+          <!-- Paso 3: CAMINO LARGO al NORTE (+x) por y=2 hasta x=12 ("casi la pared"), cruzando el cruce -->
+          <waypoint><time>52</time><pose>12 2 1.0 0 0 0</pose></waypoint>
+          <!-- Pasos 4-7: cuadrado GRANDE HORARIO (4 giros a la DERECHA): E(-y), S(-x), O(+y), N(+x).
+               8 m x 5 m para que el robot recorra y se vea el seguimiento real. -->
+          <waypoint><time>53</time><pose>12 2 1.0 0 0 -1.57</pose></waypoint>   <!-- giro dcha -> ESTE -->
+          <waypoint><time>64</time><pose>12 -3 1.0 0 0 -1.57</pose></waypoint>  <!-- camino ESTE (-y) 5m -->
+          <waypoint><time>65</time><pose>12 -3 1.0 0 0 -3.14</pose></waypoint>  <!-- giro dcha -> SUR -->
+          <waypoint><time>83</time><pose>4 -3 1.0 0 0 -3.14</pose></waypoint>   <!-- camino SUR (-x) 8m -->
+          <waypoint><time>84</time><pose>4 -3 1.0 0 0 -4.71</pose></waypoint>   <!-- giro dcha -> OESTE -->
+          <waypoint><time>95</time><pose>4 2 1.0 0 0 -4.71</pose></waypoint>    <!-- camino OESTE (+y) 5m -->
+          <waypoint><time>96</time><pose>4 2 1.0 0 0 -6.28</pose></waypoint>    <!-- giro dcha -> NORTE -->
+          <waypoint><time>114</time><pose>12 2 1.0 0 0 -6.28</pose></waypoint>  <!-- camino NORTE (+x) 8m; cuadrado completo -->
+          <!-- Volver al inicio (5,2) por y=2 (re-cruza el cruce) y reiniciar -->
+          <waypoint><time>115</time><pose>12 2 1.0 0 0 -3.14</pose></waypoint>
+          <waypoint><time>131</time><pose>5 2 1.0 0 0 -3.14</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!-- Clase 2: Mingfei (Verde) - Corriendo Este-Oeste (origen pelvis, Z=1.0) -->
+    <actor name="actor_1">
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/run.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="run">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/run.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <delay_start>2.0</delay_start>
+        <auto_start>true</auto_start>
+        <!-- Cruzante: corre por y=6.0 (~4 m del robot, no compite en la adquisición de
+             proximidad), pero cruza el campo de visión mientras el robot sigue al objetivo. -->
+        <trajectory id="0" type="run">
+          <waypoint><time>0</time><pose>-4 6.0 1.0 0 0 0</pose></waypoint>
+          <waypoint><time>3.0</time><pose>4 6.0 1.0 0 0 0</pose></waypoint>
+          <waypoint><time>3.2</time><pose>4 6.0 1.0 0 0 3.14</pose></waypoint>
+          <waypoint><time>6.2</time><pose>-4 6.0 1.0 0 0 3.14</pose></waypoint>
+          <waypoint><time>6.4</time><pose>-4 6.0 1.0 0 0 0</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!-- Clase 3: Visitante Femenina local - Norte-Sur (origen pies, Z=0.0) -->
+    <actor name="actor_2">
+      <skin>
+        <filename>model://actor_female_visitor/meshes/FemaleVisitorWalk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>model://actor_female_visitor/meshes/FemaleVisitorWalk.dae</filename>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <auto_start>true</auto_start>
+        <!-- Camina N-S por el oeste pero sin bajar de y=5.0 (>3.5 m del robot): cruza
+             el escenario sin competir en la adquisición de proximidad del objetivo. -->
+        <trajectory id="0" type="walk">
+          <waypoint><time>0</time><pose>-4.5 6.5 0.0 0 0 -1.57</pose></waypoint>
+          <waypoint><time>5.0</time><pose>-4.5 5.0 0.0 0 0 -1.57</pose></waypoint>
+          <waypoint><time>5.2</time><pose>-4.5 5.0 0.0 0 0 1.57</pose></waypoint>
+          <waypoint><time>10.2</time><pose>-4.5 6.5 0.0 0 0 1.57</pose></waypoint>
+          <waypoint><time>10.4</time><pose>-4.5 6.5 0.0 0 0 -1.57</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!-- Clase 4: Enfermera local (Turquesa) - Norte-Sur (origen pies, Z=0.0) -->
+    <actor name="actor_3">
+      <skin>
+        <filename>model://actor_nurse/meshes/NurseFemaleWalk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>model://actor_nurse/meshes/NurseFemaleWalk.dae</filename>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <waypoint><time>0</time><pose>3.5 6.0 0.0 0 0 -1.57</pose></waypoint>
+          <waypoint><time>6.0</time><pose>3.5 -2.0 0.0 0 0 -1.57</pose></waypoint>
+          <waypoint><time>6.2</time><pose>3.5 -2.0 0.0 0 0 1.57</pose></waypoint>
+          <waypoint><time>12.2</time><pose>3.5 6.0 0.0 0 0 1.57</pose></waypoint>
+          <waypoint><time>12.4</time><pose>3.5 6.0 0.0 0 0 -1.57</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!-- Clase 5: Visitante Masculino local - CRUZANTE.
+         ALTURA: este modelo ancla en la RAIZ del esqueleto (~0.90 sobre los pies), asi que
+         Z=0.0 lo HUNDE ~0.9 m y Z=1.0 lo FLOTA ~0.1 m; con Z=0.90 los pies pisan el suelo.
+         (Las mallas femenina/enfermera anclan distinto y van a Z=0.0.) Afinar +-0.05 si hace falta.
+         Cruza el corredor central en Y (perpendicular al avance del robot) como OTRO posible
+         obstaculo de tracking, a ~0.67 m/s, DESFASADO (delay_start) de la "chica de blanco"
+         (actor_2), sin meterse en las estanterias.
+         TUNEAR EN GLM: carril x (=5) y delay para que NO coincida con Mingfei en (x,2); si "las 2
+         estanterias" son las del fondo (shelf_3/4), mover el cruce a esa zona. -->
+    <actor name="actor_4">
+      <skin>
+        <filename>model://actor_male_visitor/meshes/MaleVisitorWalk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>model://actor_male_visitor/meshes/MaleVisitorWalk.dae</filename>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <delay_start>2.0</delay_start>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <!-- Cruza el corredor en Y a x=5 (Z=0.90 para pisar el suelo); ~0.67 m/s; obstaculo de tracking -->
+          <waypoint><time>0</time><pose>5 -1 0.90 0 0 1.57</pose></waypoint>
+          <waypoint><time>9</time><pose>5 5 0.90 0 0 1.57</pose></waypoint>    <!-- cruza al OESTE (+y) -->
+          <waypoint><time>10</time><pose>5 5 0.90 0 0 -1.57</pose></waypoint>
+          <waypoint><time>19</time><pose>5 -1 0.90 0 0 -1.57</pose></waypoint> <!-- cruza al ESTE (-y) -->
+          <waypoint><time>20</time><pose>5 -1 0.90 0 0 1.57</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+  </world>
+</sdf>

@@ -1,0 +1,51 @@
+# ============================================================
+#  .gitignore del repositorio del TFG (versión presentable).
+#  El repo contiene SOLO el paquete ROS 2, los mapas/modelos usados,
+#  los modelos entrenados y los scripts de la metodología. El resto
+#  (datasets, documentación, memoria, etc.) se conserva en LOCAL.
+# ============================================================
+
+# --- Build / artefactos ROS 2 y Python ---
+build/
+install/
+log/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.backup
+*.swp
+.vscode/
+.idea/
+
+# --- Pesos YOLO ---
+# Por defecto fuera (los oficiales se autodescargan con Ultralytics).
+# Los modelos ENTRENADOS propios se añaden explícitamente con `git add -f`.
+*.pt
+
+# --- Datasets (no versionados; reproducibles con los scripts de captura/GT) ---
+src/tfg_workflow/data/
+
+# --- Worlds y modelos obsoletos archivados en local ---
+src/tfg_workflow/worlds/_archivo/
+src/tfg_workflow/models/_archivo/
+
+# --- Scripts de desarrollo a nivel de paquete (no forman parte de la metodología) ---
+src/tfg_workflow/notebooks/
+src/tfg_workflow/monitor_*.sh
+src/tfg_workflow/watch_*.sh
+src/tfg_workflow/check_*_complete.sh
+
+# --- Material que NO forma parte del repositorio del TFG (solo en local) ---
+docs/
+memoria/
+referencia/
+plots/
+wandb/
+runs/
+results/
+*.eml
+directrices_tutor.txt
+conectar_github.sh
+CLAUDE*.md
+AGENTS.md
+.claude/

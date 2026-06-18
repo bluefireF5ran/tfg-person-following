@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <transport_descriptors>
+        <transport_descriptor>
+            <transport_id>no_shm</transport_id>
+            <type>UDPv4</type>
+            <sendBufferSize>10485760</sendBufferSize>
+            <receiveBufferSize>10485760</receiveBufferSize>
+            <maxMessageSize>65000</maxMessageSize>
+            <non_blocking_send>true</non_blocking_send>
+        </transport_descriptor>
+    </transport_descriptors>
+
+    <participant profile_name="no_shm" is_default_profile="true">
+        <rtps>
+            <userTransports>
+                <transport_id>no_shm</transport_id>
+            </userTransports>
+            <useBuiltinTransports>false</useBuiltinTransports>
+
+            <builtin>
+                <discovery_config>
+                    <leaseDuration>
+                        <sec>5</sec>
+                        <nanosec>0</nanosec>
+                    </leaseDuration>
+                    <initialAnnouncements>
+                        <count>5</count>
+                        <period>
+                            <sec>0</sec>
+                            <nanosec>100000000</nanosec>
+                        </period>
+                    </initialAnnouncements>
+                </discovery_config>
+            </builtin>
+        </rtps>
+    </participant>
+
+    <data_writer profile_name="default_writer" is_default_profile="true">
+        <qos>
+            <reliability>
+                <kind>RELIABLE</kind>
+            </reliability>
+        </qos>
+        <times>
+            <heartbeatPeriod>
+                <sec>0</sec>
+                <nanosec>15000000</nanosec>
+            </heartbeatPeriod>
+            <nackResponseDelay>
+                <sec>0</sec>
+                <nanosec>5000000</nanosec>
+            </nackResponseDelay>
+            <nackSupressionDuration>
+                <sec>0</sec>
+                <nanosec>5000000</nanosec>
+            </nackSupressionDuration>
+        </times>
+    </data_writer>
+
+    <data_reader profile_name="default_reader" is_default_profile="true">
+        <qos>
+            <reliability>
+                <kind>RELIABLE</kind>
+            </reliability>
+        </qos>
+    </data_reader>
+</profiles>
