@@ -463,6 +463,19 @@ def sc14_close_crossing_multi_persistent(h):
                 f"(esperado rebind a 9, multi close crossing)")
 
 
+def scL5_reject_crosser_in_front(h):
+    # Un cruzante/pilar se interpone DELANTE del objetivo: las medidas caen (láser=1.0, prof=1.2)
+    # respecto a la distancia previa (~3 m). Por consistencia temporal se RECHAZAN y se MANTIENE
+    # ~3 m (el robot NO recula por el cruce; la evitación gestiona el obstáculo aparte).
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    for _ in range(3):
+        h.tick(0.08, [{"id": 1, "cx": 320, "depth": 3.0}], laser_at_target=3.0)
+    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 1.2}], laser_at_target=1.0)
+    ok = (s["est_dist"] > 2.0 and s["dist_source"] == "hold")
+    return ok, (f"dist_source={s['dist_source']} est_dist={s['est_dist']:.2f} "
+                f"(esperado hold ~3.0, no la medida del cruzante)")
+
+
 def scR3_stuck_unstuck_rotates_no_reverse(h):
     # Atascado por obstáculo frontal >3 s: el desatasco SOLO gira en el sitio (v=0, w!=0), NO
     # retrocede — ni siquiera con la trasera DESPEJADA (el retroceso ciego chocaba).
@@ -513,6 +526,7 @@ SCENARIOS = [
     ("L2. Laser no ve al actor (inf) -> cae a profundidad", scL2_laser_inf_fallback_depth),
     ("L3. Laser implausible (fuera de cota) -> cae a profundidad", scL3_laser_out_of_bounds_fallback_depth),
     ("L4. Laser PRINCIPAL aunque la profundidad (inestable) discrepe", scL4_laser_primary_over_unstable_depth),
+    ("L5. Cruzante/pilar delante -> rechaza el salto y MANTIENE (no recula)", scL5_reject_crosser_in_front),
     ("9. Evitacion activa con objetivo centrado -> NO pierde lock (P1)", sc9_avoidance_keeps_target_locked),
     ("10. Evitacion con objetivo descentrado -> NO pierde lock (P1)", sc10_avoidance_offcenter_target_stays_locked),
     ("11. Rebind con depth gate escalado tras occlusion larga (P1)", sc11_rebind_scaled_depth_after_occlusion),

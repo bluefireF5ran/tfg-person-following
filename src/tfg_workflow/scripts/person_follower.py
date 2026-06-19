@@ -84,6 +84,10 @@ FOLLOW_LOST_TIMEOUT = 6.0
 # atraviesa al actor sin colisión y mide la PARED de detrás) o es infinito, se cae a profundidad
 # OAK-D. Así el láser es el método principal (robot real) y la profundidad el respaldo (sim).
 LASER_AGREE_M = 0.5
+# Consistencia temporal de la distancia al objetivo: salto máximo plausible entre medidas. Un
+# salto mayor (algo cruza por delante del objetivo, o el haz falla) se rechaza y se mantiene la
+# distancia previa (evita que el robot recule al cruzar un pilar/persona o al inicio).
+DIST_MAX_STEP_M = 1.0
 
 # Evitación activa de obstáculos (LiDAR; las personas no las ve el LiDAR en sim).
 AVOID_GAIN = 0.8             # rad/s de sesgo de giro hacia el lado más despejado
@@ -570,37 +574,26 @@ class PersonFollowerNode(Node):
         self._reset_rebind()
         self._locked = True
         self._det_cx, self._det_bbox_h = tgt['cx'], tgt['h']
-        # DISTANCIA AL OBJETIVO POR LÁSER (instrucción de Eugenio + método del PDF), fuente
-        # PRINCIPAL: se traduce la X de la caja a un ángulo del láser y se lee la MEDIANA del
-        # /scan en esa dirección (la persona ocluye el haz, así que es su rango). Con Gazebo en
-        # GPU el láser es fiable; la profundidad OAK-D resultó INESTABLE (oscila entre la persona
-        # y el fondo), por lo que queda solo como RESPALDO cuando el láser no es válido.
-        d_depth = tgt['dist']
-        d_laser = self._lidar_range_at_pixel(tgt['cx'])
-        if math.isfinite(d_laser) and 0.2 < d_laser < 12.0:
-            self._det_dist, self._dist_source = d_laser, 'laser'
-        else:
-            self._det_dist, self._dist_source = d_depth, 'depth'
-        # Filtro anti-salto brusco de profundidad: si la profundidad medida cambia >30%
-        # respecto a la media reciente (el actor camina a ~0.36 m/s, no puede saltar 1.3m
-        # en 2s), es que la OAK-D midió el fondo (pared/estantería) en vez de la persona.
-        # En ese caso, respaldar con la estimación por tamaño del bbox.
+        # DISTANCIA AL OBJETIVO: el LÁSER es la fuente PRINCIPAL (instrucción de Eugenio + PDF):
+        # se traduce la X de la caja a un ángulo del láser y se lee la MEDIANA del /scan ahí; la
+        # profundidad OAK-D es el RESPALDO. CONSISTENCIA TEMPORAL (clave): el objetivo está a una
+        # distancia que cambia DESPACIO; si una medida da un salto brusco respecto a la distancia
+        # previa es que algo se ha cruzado por delante (un cruzante, el pilar) o el haz ha fallado
+        # -> se RECHAZA y se mantiene la última distancia (el robot no recula por un cruce; la
+        # capa de evitación ya gestiona el obstáculo). Así no se confunde al objetivo con lo que
+        # pase por delante.
         now_ns = now.nanoseconds
-        if self._dist_source == 'depth' and self._tgt_depth_history and len(self._tgt_depth_history) >= 2:
-            avg_depth = sum(d for _, d in self._tgt_depth_history[-5:]) / min(len(self._tgt_depth_history[-5:]), 5)
-            if avg_depth > 0.5 and tgt['dist'] > 0.5:
-                ratio = tgt['dist'] / avg_depth
-                if ratio > 1.3 or ratio < 0.7:
-                    bbox_ratio = tgt['h'] / (BBOX_H_AT_TARGET * self.bbox_scale)
-                    bbox_dist = self.target_dist / max(bbox_ratio, 0.01)
-                    if 0.3 < bbox_dist < 10.0:
-                        if (now_ns - self._last_depth_warn_ns) > 2_000_000_000:
-                            self._last_depth_warn_ns = now_ns
-                            self.get_logger().warn(
-                                f"Profundidad saltó de {avg_depth:.1f}m a {tgt['dist']:.1f}m "
-                                f"(ratio={ratio:.2f}) -> usando bbox ({bbox_dist:.1f}m)")
-                        tgt['dist'] = bbox_dist
-                        tgt['depth'] = bbox_dist
+        d_laser = self._lidar_range_at_pixel(tgt['cx'])
+        d_depth = tgt['dist']
+        prev = self._tgt_depth   # última distancia válida del objetivo (None hasta el 1er fijado)
+        self._dist_source = 'hold'
+        self._det_dist = prev if (prev is not None and prev > 0.05) else d_depth
+        for cand, src in ((d_laser, 'laser'), (d_depth, 'depth')):
+            if not (math.isfinite(cand) and 0.2 < cand < 12.0):
+                continue
+            if prev is None or abs(cand - prev) <= DIST_MAX_STEP_M:
+                self._det_dist, self._dist_source = cand, src
+                break
         self._tgt_cx = tgt['cx']
         self._tgt_depth = self._det_dist
         # Historial de movimiento (últimos ~0.5s para estimar velocidad)
