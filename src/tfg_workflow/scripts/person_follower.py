@@ -570,14 +570,14 @@ class PersonFollowerNode(Node):
         self._reset_rebind()
         self._locked = True
         self._det_cx, self._det_bbox_h = tgt['cx'], tgt['h']
-        # DISTANCIA AL OBJETIVO POR LÁSER (instrucción de Eugenio + método del PDF): se traduce
-        # la X de la caja a un ángulo del láser y se lee el rango del /scan ahí. Se usa ese
-        # rango SOLO si corrobora la profundidad de cámara (el haz incide en la persona); si no
-        # (en sim el LiDAR 2D atraviesa al actor sin colisión y mide la pared de detrás, o da
-        # inf), se cae a la profundidad OAK-D. Láser = principal (robot real); prof. = respaldo.
+        # DISTANCIA AL OBJETIVO POR LÁSER (instrucción de Eugenio + método del PDF), fuente
+        # PRINCIPAL: se traduce la X de la caja a un ángulo del láser y se lee la MEDIANA del
+        # /scan en esa dirección (la persona ocluye el haz, así que es su rango). Con Gazebo en
+        # GPU el láser es fiable; la profundidad OAK-D resultó INESTABLE (oscila entre la persona
+        # y el fondo), por lo que queda solo como RESPALDO cuando el láser no es válido.
         d_depth = tgt['dist']
         d_laser = self._lidar_range_at_pixel(tgt['cx'])
-        if math.isfinite(d_laser) and abs(d_laser - d_depth) <= LASER_AGREE_M:
+        if math.isfinite(d_laser) and 0.2 < d_laser < 12.0:
             self._det_dist, self._dist_source = d_laser, 'laser'
         else:
             self._det_dist, self._dist_source = d_depth, 'depth'
@@ -586,7 +586,7 @@ class PersonFollowerNode(Node):
         # en 2s), es que la OAK-D midió el fondo (pared/estantería) en vez de la persona.
         # En ese caso, respaldar con la estimación por tamaño del bbox.
         now_ns = now.nanoseconds
-        if self._tgt_depth_history and len(self._tgt_depth_history) >= 2:
+        if self._dist_source == 'depth' and self._tgt_depth_history and len(self._tgt_depth_history) >= 2:
             avg_depth = sum(d for _, d in self._tgt_depth_history[-5:]) / min(len(self._tgt_depth_history[-5:]), 5)
             if avg_depth > 0.5 and tgt['dist'] > 0.5:
                 ratio = tgt['dist'] / avg_depth
@@ -602,7 +602,7 @@ class PersonFollowerNode(Node):
                         tgt['dist'] = bbox_dist
                         tgt['depth'] = bbox_dist
         self._tgt_cx = tgt['cx']
-        self._tgt_depth = tgt['dist']
+        self._tgt_depth = self._det_dist
         # Historial de movimiento (últimos ~0.5s para estimar velocidad)
         self._tgt_cx_history.append((now_ns, tgt['cx']))
         self._tgt_depth_history.append((now_ns, tgt['dist']))

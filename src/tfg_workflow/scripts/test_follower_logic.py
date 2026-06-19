@@ -307,14 +307,24 @@ def scL2_laser_inf_fallback_depth(h):
                 f"(esperado prof, ~3.0)")
 
 
-def scL3_laser_sees_wall_behind(h):
-    # En sim el haz ATRAVIESA al actor y mide la PARED de detrás (rango finito pero erróneo):
-    # discrepa de la profundidad -> NO se usa; se cae a profundidad (no a los 6 m de la pared).
+def scL3_laser_out_of_bounds_fallback_depth(h):
+    # Si el láser da un valor IMPLAUSIBLE (p. ej. 15 m: el haz pasó de largo sin tocar a la
+    # persona), se descarta por cota de cordura y se usa la profundidad de respaldo.
     acquire_and_lock(h, cx=320, depth=3.0, tid=1)
-    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 3.0}], laser_at_target=6.0)
+    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 3.0}], laser_at_target=15.0)
     ok = (s["dist_source"] == "depth" and abs(s["est_dist"] - 3.0) < 0.1)
     return ok, (f"dist_source={s['dist_source']} est_dist={s['est_dist']:.2f} "
-                f"(esperado prof ~3.0, NO 6.0 de la pared)")
+                f"(esperado prof ~3.0: láser 15 m fuera de cota)")
+
+
+def scL4_laser_primary_over_unstable_depth(h):
+    # La profundidad OAK-D puede leer el FONDO (valor grande erróneo). El láser es la fuente
+    # PRINCIPAL y se usa aunque NO coincida con la profundidad (que es la fuente inestable).
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 5.0}], laser_at_target=2.8)
+    ok = (s["dist_source"] == "laser" and abs(s["est_dist"] - 2.8) < 0.1)
+    return ok, (f"dist_source={s['dist_source']} est_dist={s['est_dist']:.2f} "
+                f"(esperado láser 2.8, no la profundidad 5.0)")
 
 
 # ── Guarda de RETROCESO (P2: "sin chocar" con obstáculos traseros) ──
@@ -501,7 +511,8 @@ SCENARIOS = [
     ("8. Cruzante a otra profundidad, mismo cx", sc8_crosser_other_depth),
     ("L1. Distancia por LASER cuando corrobora la profundidad (PDF)", scL1_laser_corroborates),
     ("L2. Laser no ve al actor (inf) -> cae a profundidad", scL2_laser_inf_fallback_depth),
-    ("L3. Laser ve la PARED de detras -> cae a profundidad (no la pared)", scL3_laser_sees_wall_behind),
+    ("L3. Laser implausible (fuera de cota) -> cae a profundidad", scL3_laser_out_of_bounds_fallback_depth),
+    ("L4. Laser PRINCIPAL aunque la profundidad (inestable) discrepe", scL4_laser_primary_over_unstable_depth),
     ("9. Evitacion activa con objetivo centrado -> NO pierde lock (P1)", sc9_avoidance_keeps_target_locked),
     ("10. Evitacion con objetivo descentrado -> NO pierde lock (P1)", sc10_avoidance_offcenter_target_stays_locked),
     ("11. Rebind con depth gate escalado tras occlusion larga (P1)", sc11_rebind_scaled_depth_after_occlusion),
