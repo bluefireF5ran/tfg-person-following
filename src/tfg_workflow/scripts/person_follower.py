@@ -350,14 +350,20 @@ class PersonFollowerNode(Node):
 
         idx = round((person_angle - msg.angle_min) / msg.angle_increment)
         n = len(msg.ranges)
-        best = float("inf")
-        for offset in range(-5, 6):
+        vals = []
+        for offset in range(-6, 7):
             j = idx + offset
             if 0 <= j < n:
                 r = msg.ranges[j]
                 if msg.range_min < r < msg.range_max:
-                    best = min(best, r)
-        return best
+                    vals.append(r)
+        if not vals:
+            return float("inf")
+        # MEDIANA (no mínimo): sobre los haces del ángulo de la persona, la mediana devuelve el
+        # rango de la PERSONA; el mínimo cogía retornos espurios cercanos (borde de pared, suelo,
+        # otra persona) que no corroboraban la profundidad -> casi siempre caía a 'prof'.
+        vals.sort()
+        return vals[len(vals) // 2]
 
     @staticmethod
     def _parse_id(class_id: str) -> int:
