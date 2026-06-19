@@ -24,6 +24,27 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
+## Configuración (GPU NVIDIA y W&B)
+
+**GPU NVIDIA (importante para el láser).** Gazebo debe ejecutarse en la GPU; si no, el LiDAR
+simulado (`GpuLidar`) puede fallar y devolver un valor de rango FIJO (no "ve" obstáculos ni
+personas). `run_tb4_sim.sh` ya exporta las variables necesarias:
+
+```bash
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+```
+
+(En portátiles con gráfica híbrida conviene además dejarlas en `~/.bashrc`.) Para comprobar que
+Gazebo usa la GPU, con la simulación lanzada ejecuta `nvidia-smi`: deben aparecer los procesos
+`gz sim server` y `gz sim gui`. Para comprobar el láser, mira que `ros2 topic echo /scan` dé
+rangos **variables** (no un valor fijo); también puedes visualizarlo con
+`ros2 launch turtlebot4_viz view_model.launch.py` añadiendo el `LaserScan` en RViz.
+
+**Weights & Biases es opcional.** El seguidor registra telemetría en W&B si hay sesión iniciada
+(`wandb login`); si no la hay, arranca igual y continúa **sin telemetría** (no es necesario para
+ejecutar la demo). También puede desactivarse con `use_wandb:=false`.
+
 ## Ejecución de la demo de seguimiento
 
 En tres terminales (con el workspace *sourced* en cada una):

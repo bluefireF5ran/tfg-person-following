@@ -186,23 +186,32 @@ class PersonFollowerNode(Node):
 
         if self.use_wandb and WANDB_AVAILABLE:
             self.get_logger().info("Inicializando Weights & Biases...")
-            wandb.init(
-                project=self.wandb_project,
-                name=self.wandb_run_name,
-                tags=[self.wandb_tag],
-                config={
-                    "safe_dist": self.safe_dist,
-                    "target_dist": self.target_dist,
-                    "max_linear": self.max_linear,
-                    "max_angular": self.max_angular,
-                    "lost_timeout": self.lost_timeout,
-                    "bbox_scale": self.bbox_scale,
-                    "enable_ramping": self.enable_ramping,
-                }
-            )
-            self.get_logger().info("Dashboard de telemetria W&B conectado!")
+            # W&B es OPCIONAL: si no hay API key (p. ej. al clonar el repo en otra máquina sin
+            # `wandb login`), wandb.init lanza UsageError. Lo capturamos para NO matar el nodo:
+            # el seguimiento debe funcionar igual, solo sin telemetría.
+            try:
+                wandb.init(
+                    project=self.wandb_project,
+                    name=self.wandb_run_name,
+                    tags=[self.wandb_tag],
+                    config={
+                        "safe_dist": self.safe_dist,
+                        "target_dist": self.target_dist,
+                        "max_linear": self.max_linear,
+                        "max_angular": self.max_angular,
+                        "lost_timeout": self.lost_timeout,
+                        "bbox_scale": self.bbox_scale,
+                        "enable_ramping": self.enable_ramping,
+                    }
+                )
+                self.get_logger().info("Dashboard de telemetria W&B conectado!")
+            except Exception as e:
+                self.use_wandb = False
+                self.get_logger().warn(
+                    f"W&B desactivado (no se pudo inicializar: {e}). El seguimiento continúa "
+                    f"sin telemetría. Para habilitarlo: `wandb login` o lanzar con use_wandb:=false.")
         elif self.use_wandb and not WANDB_AVAILABLE:
-            self.get_logger().warn("Libreria 'wandb' no encontrada.")
+            self.get_logger().warn("Libreria 'wandb' no encontrada; se continúa sin telemetría.")
 
         # Publicar en /cmd_vel (entrada de motion_control del Create3), NO en
         # /diffdrive_controller/cmd_vel: publicar ahí pelea con los ceros que motion_control

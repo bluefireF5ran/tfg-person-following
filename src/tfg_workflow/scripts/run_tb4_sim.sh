@@ -12,6 +12,13 @@ set -u
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 
+# GPU NVIDIA (PRIME render offload): fuerza a que Gazebo se ejecute en la GPU. Sin esto, en
+# portatiles con grafica hibrida el GpuLidar falla y /scan devuelve un valor FIJO (el laser no
+# "ve" obstaculos ni personas). Inocuo en equipos solo-NVIDIA. Verificar con `nvidia-smi`
+# (deben aparecer `gz sim server`/`gui`) y que /scan de rangos VARIABLES.
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+
 WORLD="${1:-warehouse_actors}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCH_DIR="$(cd "$SCRIPT_DIR/../launch" && pwd)"
