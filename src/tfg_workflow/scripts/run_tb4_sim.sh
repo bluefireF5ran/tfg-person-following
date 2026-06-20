@@ -18,8 +18,14 @@ export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 # (deben aparecer `gz sim server`/`gui`) y que /scan de rangos VARIABLES.
 export __NV_PRIME_RENDER_OFFLOAD=1
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
+# En esta maquina las dos de arriba NO bastaban: glvnd elegia Mesa (warning `libEGL ... driver
+# (null)`) y el GpuLidar no renderizaba. Hay que forzar tambien el vendor EGL de NVIDIA. El
+# fichero existe si esta el driver glvnd de NVIDIA (junto a 50_mesa.json); inocuo si ya se usa.
+export __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-/usr/share/glvnd/egl_vendor.d/10_nvidia.json}"
 
-WORLD="${1:-warehouse_actors}"
+# Por defecto, el circuito cerrado con actores que se usa para la demo de seguimiento. Los mundos
+# warehouse_actors*.sdf antiguos (captura de dataset) están archivados en worlds/_archivo/.
+WORLD="${1:-warehouse_unified}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCH_DIR="$(cd "$SCRIPT_DIR/../launch" && pwd)"
 WORLDS_DIR="$(cd "$SCRIPT_DIR/../worlds" && pwd)"

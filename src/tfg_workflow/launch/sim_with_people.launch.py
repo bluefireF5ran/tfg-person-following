@@ -21,7 +21,7 @@ ARGUMENTS = [
                           description='Robot namespace'),
     DeclareLaunchArgument('rviz', default_value='false',
                           choices=['true', 'false'], description='Start rviz.'),
-    DeclareLaunchArgument('world', default_value='warehouse_actors',
+    DeclareLaunchArgument('world', default_value='warehouse_unified',
                           description='Simulation World'),
     DeclareLaunchArgument('model', default_value='standard',
                           choices=['standard', 'lite'],

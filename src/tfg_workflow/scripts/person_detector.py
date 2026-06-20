@@ -164,11 +164,19 @@ class PersonDetectorNode(Node):
             return
         h, w, _ = cv_img.shape
 
-        # YOLO + tracker (estado persistente → ids estables)
-        results = self.model.track(
-            cv_img, classes=[0], conf=self.conf_thresh, persist=True,
-            tracker=self.tracker_cfg, verbose=False, device="cuda:0",
-        )
+        # YOLO + tracker (estado persistente → ids estables). El filtro de Kalman del tracker puede
+        # fallar numéricamente en algún frame ("leading minor not positive definite") y, sin
+        # protección, MATABA el nodo (el robot se quedaba conduciendo a ciegas). Se captura, se
+        # avisa y se SALTA el frame: el tracker se recupera en los siguientes y el nodo sigue vivo.
+        try:
+            results = self.model.track(
+                cv_img, classes=[0], conf=self.conf_thresh, persist=True,
+                tracker=self.tracker_cfg, verbose=False, device="cuda:0",
+            )
+        except Exception as e:
+            self.get_logger().warn(
+                f"Fallo del tracker en este frame, se omite: {e}", throttle_duration_sec=2.0)
+            return
 
         det_array = Detection2DArray()
         det_array.header = msg.header

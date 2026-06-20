@@ -5,7 +5,7 @@ Usage (with simulation already running):
 
 With custom parameters:
   ros2 launch src/tfg_workflow/launch/person_follow.launch.py \
-      model:=yolo11s.pt safe_dist:=0.6 target_dist:=1.5
+      model:=yolo11s.pt safe_dist:=0.6 target_dist:=3.0
 """
 
 from pathlib import Path

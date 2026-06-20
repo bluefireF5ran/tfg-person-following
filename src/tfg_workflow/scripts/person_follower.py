@@ -27,12 +27,27 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 
+import rclpy.duration
+import rclpy.time
+from laser_geometry import LaserProjection
+import tf2_ros
+from tf2_sensor_msgs import do_transform_cloud
+from sensor_msgs_py import point_cloud2 as pc2
+from nav_msgs.msg import Odometry
+
 # ── Constants ──────────────────────────────────────────────────
 # Resolución por defecto de la cámara OAK-D del TurtleBot4 en simulación.
 # Configurable por CLI: la cámara se capturó a 640x480 para la fase de tracking.
 IMAGE_WIDTH = 640
 IMAGE_HEIGHT = 480
-HFOV_RAD = math.radians(69.0)
+HFOV_DEG = 69.0
+ANG_WIN_DEG = 4.0
+AHEAD_X_M = 0.40
+# Semiancho del CORREDOR de avance (m): un punto cuenta como obstáculo frontal solo si está por
+# delante (x>AHEAD_X_M) Y dentro del ancho del robot (|y|<=FRONT_HALFWIDTH_M). Sin el límite
+# lateral, un cruzante que pasa al costado (x>0.40 pero |y| grande) se contaría como frontal por
+# su distancia euclídea y el robot frenaría sin necesidad. Radio de la base ~0.17 m + holgura.
+FRONT_HALFWIDTH_M = 0.35
 
 # Altura (px) del bounding box de una persona a la distancia de consigna (respaldo si
 # no hay profundidad). Escala con la resolución (~400 px a 640x480).
@@ -75,6 +90,11 @@ REBIND_DRIFT_PX = 8          # px: deriva máx. respecto al ancla para contar co
 # Pérdida REAL del objetivo fijado: ausente más de esto (agotados el coast y el re-vínculo) →
 # soltar el fijado y volver a adquirir. Holgado para que un cruce normal (1-3 s) NO la dispare.
 FOLLOW_LOST_TIMEOUT = 6.0
+# SEGURIDAD: si el objetivo fijado lleva sin VERSE más de esto, el "lock" está obsoleto y se
+# suelta para DEJAR DE AVANZAR a ciegas con la última distancia congelada (si el detector deja de
+# publicar —p. ej. se cae— _on_detections no corre y _locked se quedaba en True conduciendo solo).
+# Más corto que FOLLOW_LOST_TIMEOUT: primero se para (suelta lock), luego se re-adquiere.
+LOST_BLIND_STOP_S = 1.5
 
 # Distancia al objetivo por LÁSER (instrucción de Eugenio + método del PDF relacionLaserImagen):
 # la coordenada X de la caja se traduce a un ÁNGULO del láser (centro imagen = 0°) vía el FOV y
@@ -88,6 +108,18 @@ LASER_AGREE_M = 0.5
 # salto mayor (algo cruza por delante del objetivo, o el haz falla) se rechaza y se mantiene la
 # distancia previa (evita que el robot recule al cruzar un pilar/persona o al inicio).
 DIST_MAX_STEP_M = 1.0
+# Salida del enganche: si la distancia lleva más de este tiempo en 'hold' (rechazando todas las
+# lecturas por estar anclada a un valor que saltó), se re-sincroniza con la mejor lectura válida
+# actual. Evita quedarse clavado en una distancia errónea (p.ej. 9.35 m mientras el objetivo está
+# a ~2 m), que dejaría al robot avanzando a ciegas.
+DIST_HOLD_RESYNC_S = 1.0
+# Suavizado (EMA) de la distancia que usa el CONTROL de velocidad. El jitter de la distancia
+# (profundidad OAK-D ruidosa + conmutación con el láser) provocaba acelerones y retrocesos que
+# descentraban al objetivo y lo sacaban del FOV -> pérdida del objetivo. El EMA estabiliza la
+# velocidad; la distancia REPORTADA (_est_dist, telemetría) sigue siendo la cruda. 0<alpha<=1:
+# más bajo = más suave (más lag). 0.4 ~ filtra el jitter sin retrasar la respuesta a un objetivo
+# que se acerca/aleja de verdad.
+DIST_EMA_ALPHA = 0.4
 
 # Evitación activa de obstáculos (LiDAR; las personas no las ve el LiDAR en sim).
 AVOID_GAIN = 0.8             # rad/s de sesgo de giro hacia el lado más despejado
@@ -155,7 +187,8 @@ class PersonFollowerNode(Node):
         self._det_bbox_h = 0.0
         self._det_dist = 0.0        # distancia (m) al objetivo (láser corroborado, o profundidad)
         self._dist_source = 'depth' # 'laser' (método del PDF) | 'depth' (respaldo, actor sin colisión)
-        self._est_dist = 0.0        # distancia usada por el control (para log/telemetría/banco)
+        self._est_dist = 0.0        # distancia CRUDA reportada (log/telemetría/banco)
+        self._ctrl_dist = 0.0       # distancia SUAVIZADA (EMA) que usa el control de velocidad
         self._det_count = 0
         self._locked = False        # True solo cuando el objetivo fijado está visible
 
@@ -168,6 +201,7 @@ class PersonFollowerNode(Node):
         self._tgt_lost_since = None # instante en que el id del objetivo dejó de verse (coast/re-vínculo)
         self._tgt_cx = None         # última X conocida del objetivo (re-vínculo espacial)
         self._tgt_depth = None      # última profundidad conocida del objetivo
+        self._dist_hold_since_ns = None  # instante en que la distancia entró en 'hold' (re-sync)
         # Candidato a re-vínculo en evaluación (debe permanecer ~quieto unos frames).
         self._rebind_id = None
         self._rebind_anchor_cx = None
@@ -187,6 +221,14 @@ class PersonFollowerNode(Node):
         self.left_min = float("inf")
         self.right_min = float("inf")
         self.rear_min = float("inf")    # holgura trasera (para no retroceder a ciegas, P2)
+
+        self._cloud_pts = []            # [(x, y, d, ang_deg), ...]
+        self._yaw_deg = 0.0
+
+        self._tf_buffer = tf2_ros.Buffer()
+        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
+        self._projector = LaserProjection()
+        self.create_subscription(Odometry, "/odom", self._on_odom, 10)
 
         if self.use_wandb and WANDB_AVAILABLE:
             self.get_logger().info("Inicializando Weights & Biases...")
@@ -317,57 +359,96 @@ class PersonFollowerNode(Node):
             self.get_logger().warn(f"No se pudieron fijar: {[p[1] for p in still]} (servicios no disponibles)")
             self._param_timer.cancel()
 
+    def _on_odom(self, msg: Odometry):
+        self._yaw_deg = self._yaw_deg_from_quat(msg.pose.pose.orientation)
+
+    @staticmethod
+    def _yaw_deg_from_quat(q):
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.degrees(math.atan2(siny_cosp, cosy_cosp))
+        if yaw < 0:
+            yaw += 360.0
+        return yaw
+
     def _on_scan(self, msg: LaserScan):
-        n = len(msg.ranges)
-        if n == 0:
+        try:
+            cloud = self._projector.projectLaser(msg)
+            # La transformación láser->base_link es ESTÁTICA (el LiDAR va rígido al robot): pedimos
+            # la ÚLTIMA disponible (Time()) en vez de la del stamp exacto del scan, que provocaba
+            # fallos de extrapolación intermitentes ("frame does not exist") cuando ese instante
+            # preciso no estaba en el buffer TF. Al arranque, hasta que /tf_static llega, puede
+            # fallar unas pocas veces: se avisa con throttle y se descarta esa muestra.
+            transform = self._tf_buffer.lookup_transform(
+                "base_link", msg.header.frame_id, rclpy.time.Time())
+            cloud = do_transform_cloud(cloud, transform)
+        except Exception as e:
+            self.get_logger().warn(
+                f"TF scan->base_link aún no disponible, se descarta el scan: {e}",
+                throttle_duration_sec=5.0)
             return
+
         self._scan_msg = msg
-        angle_min = msg.angle_min
-        angle_inc = msg.angle_increment
-        front_min = float("inf")
-        left_min = float("inf")     # +30..+90 grados (holgura a la izquierda)
-        right_min = float("inf")    # -90..-30 grados (holgura a la derecha)
-        rear_min = float("inf")     # |angle| >= 90 grados (TODA la mitad trasera; sin hueco ciego)
-        for i, r in enumerate(msg.ranges):
-            if not (msg.range_min < r < msg.range_max):
-                continue
-            angle = angle_min + i * angle_inc
-            if abs(angle) < math.radians(30):
-                front_min = min(front_min, r)
-            elif math.radians(30) <= angle < math.radians(90):
-                left_min = min(left_min, r)
-            elif math.radians(-90) < angle <= math.radians(-30):
-                right_min = min(right_min, r)
-            elif abs(angle) >= math.radians(90):
-                rear_min = min(rear_min, r)
-        self.frontal_min_range = front_min
+        pts = []
+        left_min = float("inf")
+        right_min = float("inf")
+        rear_min = float("inf")
+
+        for p in pc2.read_points(cloud, field_names=("x", "y"), skip_nans=True):
+            x, y = p
+            d = math.hypot(x, y)
+            ang_deg = math.degrees(math.atan2(y, x))
+            if ang_deg < 0:
+                ang_deg += 360.0
+
+            pts.append((x, y, d, ang_deg))
+
+            # Sectores laterales/trasero (en grados, marco base_link) para la evitación y el gate
+            # de retroceso. El frontal NO es un sector angular: es el corredor de avance (abajo).
+            a = ang_deg if ang_deg <= 180 else ang_deg - 360
+            if 30.0 <= a < 90.0:
+                left_min = min(left_min, d)
+            elif -90.0 < a <= -30.0:
+                right_min = min(right_min, d)
+            elif abs(a) >= 90.0:
+                rear_min = min(rear_min, d)
+
+        self._cloud_pts = pts
+        self.frontal_min_range = self._frontal_min_in_corridor(pts)
         self.left_min = left_min
         self.right_min = right_min
         self.rear_min = rear_min
 
-    def _lidar_range_at_pixel(self, pixel_x: float) -> float:
-        if self._scan_msg is None:
-            return float("inf")
-        msg = self._scan_msg
-        norm_x = (pixel_x - IMAGE_WIDTH / 2.0) / (IMAGE_WIDTH / 2.0)
-        person_angle = -norm_x * (HFOV_RAD / 2.0)
+    @staticmethod
+    def _frontal_min_in_corridor(pts):
+        """Distancia al obstáculo más cercano en el CORREDOR de avance del robot: por delante
+        (x>AHEAD_X_M) y dentro del ancho del robot (|y|<=FRONT_HALFWIDTH_M). pts: lista de
+        (x, y, d, ang_deg) en base_link. inf si el corredor está despejado."""
+        fmin = float("inf")
+        for (x, y, d, _ang) in pts:
+            if x > AHEAD_X_M and abs(y) <= FRONT_HALFWIDTH_M:
+                fmin = min(fmin, d)
+        return fmin
 
-        idx = round((person_angle - msg.angle_min) / msg.angle_increment)
-        n = len(msg.ranges)
-        vals = []
-        for offset in range(-6, 7):
-            j = idx + offset
-            if 0 <= j < n:
-                r = msg.ranges[j]
-                if msg.range_min < r < msg.range_max:
-                    vals.append(r)
-        if not vals:
+    def _lidar_range_at_pixel(self, pixel_x: float) -> float:
+        if not self._cloud_pts:
             return float("inf")
-        # MEDIANA (no mínimo): sobre los haces del ángulo de la persona, la mediana devuelve el
-        # rango de la PERSONA; el mínimo cogía retornos espurios cercanos (borde de pared, suelo,
-        # otra persona) que no corroboraban la profundidad -> casi siempre caía a 'prof'.
-        vals.sort()
-        return vals[len(vals) // 2]
+        norm_x = (pixel_x - IMAGE_WIDTH / 2.0) / (IMAGE_WIDTH / 2.0)
+        bearing_deg = -norm_x * (HFOV_DEG / 2.0)
+        return self._median_range_to_bearing(self._cloud_pts, bearing_deg)
+
+    @staticmethod
+    def _median_range_to_bearing(pts, bearing_deg):
+        within = []
+        for (x, y, d, ang) in pts:
+            raw = abs(ang - bearing_deg) % 360.0
+            diff = min(raw, 360.0 - raw)
+            if diff <= ANG_WIN_DEG:
+                within.append(d)
+        if not within:
+            return float("inf")
+        within.sort()
+        return within[len(within) // 2]
 
     @staticmethod
     def _parse_id(class_id: str) -> int:
@@ -588,12 +669,41 @@ class PersonFollowerNode(Node):
         prev = self._tgt_depth   # última distancia válida del objetivo (None hasta el 1er fijado)
         self._dist_source = 'hold'
         self._det_dist = prev if (prev is not None and prev > 0.05) else d_depth
-        for cand, src in ((d_laser, 'laser'), (d_depth, 'depth')):
-            if not (math.isfinite(cand) and 0.2 < cand < 12.0):
-                continue
+        # CORROBORACIÓN láser-profundidad: el láser es la fuente PRINCIPAL, pero solo es creíble si
+        # CONCUERDA con la profundidad de cámara (|láser - prof| <= LASER_AGREE_M). Si discrepa
+        # mucho, el haz NO está incidiendo en la persona sino en otra cosa (en sim el LiDAR 2D
+        # atraviesa al actor y mide la PARED de detrás; al final del circuito leía ~0.8 m mientras
+        # el objetivo se alejaba a ~3-6 m y el robot RETROCEDÍA). En ese caso se cae a la
+        # profundidad de respaldo. Nunca se deja que un retorno de pared cercano sustituya al
+        # objetivo lejano.
+        d_depth_ok = math.isfinite(d_depth) and 0.2 < d_depth < 12.0
+        laser_ok = math.isfinite(d_laser) and 0.2 < d_laser < 12.0
+        laser_trusted = laser_ok and d_depth_ok and abs(d_laser - d_depth) <= LASER_AGREE_M
+        candidates = []
+        if laser_trusted:
+            candidates.append((d_laser, 'laser'))
+        if d_depth_ok:
+            candidates.append((d_depth, 'depth'))
+        accepted = False
+        for cand, src in candidates:
             if prev is None or abs(cand - prev) <= DIST_MAX_STEP_M:
                 self._det_dist, self._dist_source = cand, src
+                accepted = True
                 break
+        if accepted:
+            self._dist_hold_since_ns = None
+        else:
+            # Llevamos en 'hold': si la previa quedó obsoleta (saltó y ahora todas las lecturas
+            # corroboradas distan >DIST_MAX_STEP_M de ella), tras DIST_HOLD_RESYNC_S re-anclamos a
+            # la mejor lectura válida actual. PRIORIDAD A LA PROFUNDIDAD para no re-engancharnos a
+            # una pared cercana del láser (el fallo del retroceso al final del circuito).
+            if self._dist_hold_since_ns is None:
+                self._dist_hold_since_ns = now_ns
+            elif (now_ns - self._dist_hold_since_ns) > DIST_HOLD_RESYNC_S * 1e9:
+                for cand, src in sorted(candidates, key=lambda cs: cs[1] != 'depth'):
+                    self._det_dist, self._dist_source = cand, src
+                    self._dist_hold_since_ns = None
+                    break
         self._tgt_cx = tgt['cx']
         self._tgt_depth = self._det_dist
         # Historial de movimiento (últimos ~0.5s para estimar velocidad)
@@ -619,6 +729,13 @@ class PersonFollowerNode(Node):
         obstacle_close = (self.frontal_min_range < self.safe_dist if self.state != State.STOPPED
                           else self.frontal_min_range < self._obstacle_recovery)
 
+        # SEGURIDAD (anti "conducir a ciegas"): si el objetivo fijado lleva sin verse más de
+        # LOST_BLIND_STOP_S, el lock está OBSOLETO -> se suelta. La rama FOLLOWING-not-locked pone
+        # des_linear=0, así que el robot DEJA de avanzar con la distancia congelada (caso real: el
+        # detector se cayó y el robot siguió 38 s a 0.6 m/s). Si el objetivo reaparece, se re-fija.
+        if self._locked and lost_secs > LOST_BLIND_STOP_S:
+            self._locked = False
+
         # Pérdida REAL del objetivo fijado: ausente más de FOLLOW_LOST_TIMEOUT (ya agotados el
         # coast y el re-vínculo) → soltar el fijado y volver a adquirir.
         if self.target_id is not None and not self._locked and lost_secs > FOLLOW_LOST_TIMEOUT:
@@ -630,6 +747,7 @@ class PersonFollowerNode(Node):
             self._tgt_lost_since = None
             self._tgt_cx_history.clear()
             self._tgt_depth_history.clear()
+            self._ctrl_dist = 0.0   # el EMA arranca de cero con el próximo objetivo (sin lag)
             self._reset_rebind()
 
         # Estado determinado por la SUB-MÁQUINA de objetivo (NO por lost_secs, que provocaba la
@@ -698,8 +816,15 @@ class PersonFollowerNode(Node):
             else:
                 bbox_ratio = self._det_bbox_h / (BBOX_H_AT_TARGET * self.bbox_scale)
                 est_dist = self.target_dist / max(bbox_ratio, 0.01)
-            self._est_dist = est_dist
-            dist_error = est_dist - self.target_dist
+            self._est_dist = est_dist          # crudo (telemetría/banco/_dist_source)
+            # SUAVIZADO para el control: el jitter de la distancia (profundidad + conmutación con el
+            # láser) provocaba acelerones/retrocesos que descentraban y hacían PERDER al objetivo.
+            # Un EMA estabiliza la velocidad sin alterar la distancia reportada.
+            if self._ctrl_dist <= 0.05:
+                self._ctrl_dist = est_dist     # 1er frame del objetivo: sin lag
+            else:
+                self._ctrl_dist += DIST_EMA_ALPHA * (est_dist - self._ctrl_dist)
+            dist_error = self._ctrl_dist - self.target_dist
             # BANDA MUERTA de retroceso: si el objetivo está solo un poco MÁS CERCA que la
             # consigna, NO retroceder (quedarse quieto); retroceder a ciegas por acercamientos
             # pequeños era innecesario y peligroso. Solo se retrocede si se acerca de verdad.
@@ -759,6 +884,9 @@ class PersonFollowerNode(Node):
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()   # sello con hora (sim) actual
         msg.header.frame_id = "base_link"
+        # Las velocidades lineales y angulares se publican en rad/s (y m/s) en /cmd_vel,
+        # que es el contrato de motion_control del Create3. TODO el pipeline interno usa
+        # grados para ángulos (sectores LiDAR, yaw, bearing) y rad/s solo aquí.
         msg.twist.linear.x = self.current_linear
         msg.twist.angular.z = self.current_angular
         self.cmd_pub.publish(msg)
@@ -803,10 +931,13 @@ class PersonFollowerNode(Node):
 
 def main():
     parser = argparse.ArgumentParser(description="Safe person-following controller for TurtleBot4")
+    # Defaults alineados con person_follow.launch.py (la consigna de Eugenio): a 3.0 m la OAK-D ve
+    # a la persona entera (a <3 m solo piernas), y 0.6/1.2 son los límites seguros de la demo. Así
+    # ejecutar el script suelto se comporta como el launch (que de todas formas los pasa explícitos).
     parser.add_argument("--safe-dist", type=float, default=0.5)
-    parser.add_argument("--target-dist", type=float, default=1.5)
-    parser.add_argument("--max-linear", type=float, default=1.0)
-    parser.add_argument("--max-angular", type=float, default=1.5)
+    parser.add_argument("--target-dist", type=float, default=3.0)
+    parser.add_argument("--max-linear", type=float, default=0.6)
+    parser.add_argument("--max-angular", type=float, default=1.2)
     parser.add_argument("--lost-timeout", type=float, default=3.0)
     parser.add_argument("--search-angular", type=float, default=1.2,
                         help="Velocidad de giro en la fase de busqueda (rad/s)")
