@@ -12,6 +12,9 @@ obstáculos del entorno sin colisionar.
 - ROS 2 Jazzy y Gazebo Harmonic (con la integración `ros_gz`)
 - Paquetes TurtleBot 4 (`turtlebot4_gz_bringup`, `irobot_create_*`)
 - Python 3.12 y `ultralytics` (YOLO). GPU NVIDIA recomendada.
+- `boxmot` (`pip install boxmot`): el seguidor usa **StrongSORT** por defecto (coherente con la
+  evaluación); descarga sus pesos de reID la primera vez. Si no se quiere instalar, se puede usar
+  el tracker nativo de Ultralytics con `botsort:=true` en el *launch*.
 
 > El modelo de detección en vivo (`yolo11s.pt`, COCO) y los modelos de escenario de Gazebo
 > (Fuel) se **descargan automáticamente** la primera vez; no se versionan en el repositorio.
@@ -88,8 +91,9 @@ src/tfg_workflow/
 ## Componentes
 
 - **Detector (`person_detector.py`)**: suscribe `/oakd/rgb/preview/image_raw` (+ profundidad),
-  ejecuta YOLO con seguimiento multi-objeto (BoT-SORT) y publica todas las personas en
-  `/person_detections` con su distancia.
+  ejecuta YOLO con seguimiento multi-objeto (StrongSORT por defecto, coherente con la evaluación;
+  BoT-SORT con `botsort:=true`) y publica todas las personas en `/person_detections` con su
+  distancia.
 - **Seguidor (`person_follower.py`)**: a partir de `/person_detections` y `/scan`, fija el
   objetivo por proximidad (~3 s), lo sigue por identificador (robusto a cruces) manteniendo la
   distancia de consigna, y aplica una capa de evitación basada en LiDAR. Publica en `/cmd_vel`.

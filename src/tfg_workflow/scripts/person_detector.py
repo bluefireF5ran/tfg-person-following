@@ -94,7 +94,8 @@ class PersonDetectorNode(Node):
     """YOLO + BoT-SORT; publica TODAS las personas (id + bbox + distancia por profundidad)."""
 
     def __init__(self, model_file: str, image_topic: str, conf_thresh: float,
-                 tracker_cfg: str, depth_topic: str):
+                 tracker_cfg: str, depth_topic: str,
+                 use_strongsort: bool = True, reid_weights: str = "osnet_x0_25_msmt17.pt"):
         super().__init__("person_detector")
 
         self.declare_parameter("process_hz", 12.0)
@@ -105,13 +106,29 @@ class PersonDetectorNode(Node):
         self.model = YOLO(resolved)
         self.conf_thresh = conf_thresh
         self.tracker_cfg = tracker_cfg
+        self.use_strongsort = use_strongsort
+        self._sort = None
 
         self.latest_depth = None          # último frame de profundidad (m), cacheado
         self.follow_target_id = -1        # id que el follower está siguiendo (para pintarlo)
 
-        self.get_logger().info(
-            f"Tracker: {self.tracker_cfg} | distancia por profundidad ({depth_topic})"
-        )
+        if use_strongsort:
+            # StrongSORT NO es nativo de Ultralytics: se usa la librería BoxMOT (la misma de la
+            # evaluación offline), con detección por YOLO.predict + tracker.update. Import perezoso
+            # para no exigir boxmot en el modo por defecto (BoT-SORT). reID osnet: boxmot lo
+            # descarga si no está. Elegido por coherencia con la evaluación cuantitativa (StrongSORT
+            # tuvo el menor número de cambios de identidad).
+            from boxmot.trackers.tracker_zoo import create_tracker, get_tracker_config
+            self._sort = create_tracker(
+                "strongsort", get_tracker_config("strongsort"),
+                reid_weights=Path(reid_weights), device="cuda:0", half=False)
+            self.get_logger().info(
+                f"Tracker: StrongSORT (BoxMOT, reID={reid_weights}) | distancia por profundidad ({depth_topic})"
+            )
+        else:
+            self.get_logger().info(
+                f"Tracker: {self.tracker_cfg} (Ultralytics) | distancia por profundidad ({depth_topic})"
+            )
 
         # Pub / Sub (QoS de sensor: best-effort, frame más reciente)
         self.det_pub = self.create_publisher(Detection2DArray, "/person_detections", 10)
@@ -149,6 +166,44 @@ class PersonDetectorNode(Node):
             return 0.0
         return float(np.median(valid))
 
+    def _track_frame(self, cv_img):
+        """Devuelve [(id, x1, y1, x2, y2, conf)] con las personas seguidas en este frame, con dos
+        backends intercambiables y la misma salida: StrongSORT (BoxMOT) si --strongsort, o el
+        tracker nativo de Ultralytics (BoT-SORT) por defecto. Las cajas se recortan a la imagen."""
+        h, w = cv_img.shape[:2]
+        out = []
+        if self.use_strongsort:
+            # Detección por YOLO + asociación por StrongSORT (BoxMOT). Salida Nx8:
+            # x1,y1,x2,y2,id,conf,cls,ind.
+            res = self.model.predict(cv_img, classes=[0], conf=self.conf_thresh,
+                                     verbose=False, device="cuda:0")
+            dets = np.empty((0, 6))
+            if len(res) and res[0].boxes is not None and len(res[0].boxes) > 0:
+                b = res[0].boxes
+                dets = np.hstack([b.xyxy.cpu().numpy(),
+                                  b.conf.cpu().numpy().reshape(-1, 1),
+                                  b.cls.cpu().numpy().reshape(-1, 1)])
+            for t in self._sort.update(dets, cv_img):
+                tid = int(t[4])
+                conf = float(t[5]) if len(t) > 5 else 1.0
+                out.append((tid, max(0, int(t[0])), max(0, int(t[1])),
+                            min(w, int(t[2])), min(h, int(t[3])), conf))
+        else:
+            # Tracker nativo de Ultralytics con estado persistente (ids estables).
+            results = self.model.track(
+                cv_img, classes=[0], conf=self.conf_thresh, persist=True,
+                tracker=self.tracker_cfg, verbose=False, device="cuda:0",
+            )
+            if len(results) > 0 and results[0].boxes is not None and results[0].boxes.id is not None:
+                boxes = results[0].boxes
+                ids = boxes.id.int().cpu().tolist()
+                xyxy = boxes.xyxy.cpu().numpy()
+                confs = boxes.conf.cpu().numpy()
+                for (x1, y1, x2, y2), tid, conf in zip(xyxy, ids, confs):
+                    out.append((int(tid), max(0, int(x1)), max(0, int(y1)),
+                                min(w, int(x2)), min(h, int(y2)), float(conf)))
+        return out
+
     # ── Image callback ───────────────────────────────────────
     def _on_image(self, msg: Image):
         now = self.get_clock().now().nanoseconds * 1e-9
@@ -164,15 +219,12 @@ class PersonDetectorNode(Node):
             return
         h, w, _ = cv_img.shape
 
-        # YOLO + tracker (estado persistente → ids estables). El filtro de Kalman del tracker puede
-        # fallar numéricamente en algún frame ("leading minor not positive definite") y, sin
-        # protección, MATABA el nodo (el robot se quedaba conduciendo a ciegas). Se captura, se
-        # avisa y se SALTA el frame: el tracker se recupera en los siguientes y el nodo sigue vivo.
+        # Detección + seguimiento (ids estables). El filtro de Kalman del tracker puede fallar
+        # numéricamente en algún frame ("leading minor not positive definite") y, sin protección,
+        # MATABA el nodo (el robot se quedaba conduciendo a ciegas). Se captura, se avisa y se SALTA
+        # el frame: el tracker se recupera en los siguientes y el nodo sigue vivo.
         try:
-            results = self.model.track(
-                cv_img, classes=[0], conf=self.conf_thresh, persist=True,
-                tracker=self.tracker_cfg, verbose=False, device="cuda:0",
-            )
+            raw = self._track_frame(cv_img)
         except Exception as e:
             self.get_logger().warn(
                 f"Fallo del tracker en este frame, se omite: {e}", throttle_duration_sec=2.0)
@@ -182,16 +234,9 @@ class PersonDetectorNode(Node):
         det_array.header = msg.header
 
         tracks = []
-        if len(results) > 0 and results[0].boxes is not None and results[0].boxes.id is not None:
-            boxes = results[0].boxes
-            ids = boxes.id.int().cpu().tolist()
-            xyxy = boxes.xyxy.cpu().numpy()
-            confs = boxes.conf.cpu().numpy()
-            for (x1, y1, x2, y2), tid, conf in zip(xyxy, ids, confs):
-                x1, y1 = max(0, int(x1)), max(0, int(y1))
-                x2, y2 = min(w, int(x2)), min(h, int(y2))
-                tracks.append({'id': int(tid), 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-                               'conf': float(conf), 'depth': self._track_depth(x1, y1, x2, y2)})
+        for (tid, x1, y1, x2, y2, conf) in raw:
+            tracks.append({'id': tid, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+                           'conf': conf, 'depth': self._track_depth(x1, y1, x2, y2)})
 
         # ── Publicar TODAS las personas (id, bbox, distancia por profundidad) ──
         for t in tracks:
@@ -246,15 +291,23 @@ def main():
     parser.add_argument("--depth-topic", default="/oakd/rgb/preview/depth")
     parser.add_argument("--conf", type=float, default=0.4)
     parser.add_argument("--tracker", default="botsort.yaml",
-                        help="Ultralytics tracker (botsort.yaml | bytetrack.yaml)")
+                        help="Tracker nativo de Ultralytics para el modo --botsort (botsort.yaml | bytetrack.yaml)")
+    parser.add_argument("--botsort", action="store_true",
+                        help="Usar BoT-SORT (tracker nativo de Ultralytics) en lugar del StrongSORT "
+                             "(BoxMOT, con reID) que se emplea por defecto; StrongSORT es coherente "
+                             "con la evaluación cuantitativa")
+    parser.add_argument("--reid-weights", default="osnet_x0_25_msmt17.pt",
+                        help="Pesos reID para StrongSORT (BoxMOT los descarga si no están)")
 
     rclpy.init(args=sys.argv)
     cleaned = rclpy.utilities.remove_ros_args(args=sys.argv)[1:]
+    cleaned = [a for a in cleaned if a != ""]   # el launch puede pasar "" (flag condicional)
     args = parser.parse_args(cleaned)
 
     node = PersonDetectorNode(
         model_file=args.model, image_topic=args.topic, conf_thresh=args.conf,
         tracker_cfg=args.tracker, depth_topic=args.depth_topic,
+        use_strongsort=not args.botsort, reid_weights=args.reid_weights,
     )
     try:
         rclpy.spin(node)

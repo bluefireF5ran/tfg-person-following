@@ -6,13 +6,17 @@ Usage (with simulation already running):
 With custom parameters:
   ros2 launch src/tfg_workflow/launch/person_follow.launch.py \
       model:=yolo11s.pt safe_dist:=0.6 target_dist:=3.0
+
+El tracker por defecto es StrongSORT (BoxMOT, coherente con la evaluación). Para usar BoT-SORT
+(tracker nativo de Ultralytics):
+  ros2 launch src/tfg_workflow/launch/person_follow.launch.py botsort:=true
 """
 
 from pathlib import Path
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent / "scripts")
@@ -33,6 +37,11 @@ ARGUMENTS = [
     DeclareLaunchArgument(
         "tracker", default_value="botsort.yaml",
         description="Tracker MOT de Ultralytics (botsort.yaml | bytetrack.yaml)"),
+    DeclareLaunchArgument(
+        "botsort", default_value="false", choices=["true", "false"],
+        description="Usar BoT-SORT (tracker de Ultralytics) en vez del StrongSORT (BoxMOT, con "
+                    "reID) que se usa por defecto. StrongSORT es coherente con la evaluacion "
+                    "cuantitativa. true|false"),
     DeclareLaunchArgument(
         "depth_topic", default_value="/oakd/rgb/preview/depth",
         description="Topic de profundidad OAK-D (distancia al objetivo)"),
@@ -80,6 +89,11 @@ def generate_launch_description():
             "--depth-topic", LaunchConfiguration("depth_topic"),
             "--conf", LaunchConfiguration("conf"),
             "--tracker", LaunchConfiguration("tracker"),
+            # "--botsort" si botsort:=true (StrongSORT es el modo por defecto); cadena vacía en
+            # caso contrario (el detector filtra los argumentos vacíos). Así no hace falta una
+            # acción Node duplicada.
+            PythonExpression(["\"--botsort\" if \"", LaunchConfiguration("botsort"),
+                              "\" == \"true\" else \"\""]),
         ],
     )
 
