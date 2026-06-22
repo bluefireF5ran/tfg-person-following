@@ -27,6 +27,10 @@ STARTUP_MAX="${STARTUP_MAX:-120}"
 # instante del cruce del actor coincide con el robot y puede robarse el objetivo. Subir si pasa.
 FOLLOWER_DELAY_S="${FOLLOWER_DELAY_S:-15}"
 SETTLE_S="${SETTLE_S:-10}"
+# Variación del punto de partida del robot en CADA ejecución (1=sí, 0=no). Así cada run parte de
+# una pose distinta -> las repeticiones no son el mismo escenario determinista, sino muestras con
+# condiciones iniciales diferentes (geometría de adquisición y momento de los cruces distintos).
+RANDOMIZE_SPAWN="${RANDOMIZE_SPAWN:-1}"
 WORLD="${WORLD:-warehouse_unified}"
 CAM_TOPIC="/oakd/rgb/preview/image_raw"   # tópico que confirma que Gazebo + sensores están vivos
 
@@ -85,7 +89,19 @@ echo "============================================================"
 for i in $(seq 1 "$N"); do
   echo "===== Iteración $i/$N ($(date +%H:%M:%S)) ====="
 
-  # --- Simulación (grupo propio con setsid) ---
+  # --- Punto de partida del robot: aleatorio por iteración (si RANDOMIZE_SPAWN=1) ---
+  # Rango cómodo alrededor de (-2,2,0): distancia inicial al objetivo y encuadre distintos en cada
+  # run, pero dentro del rango de adquisición para que siga fijando al objetivo.
+  if [ "$RANDOMIZE_SPAWN" = "1" ]; then
+    read SPAWN_X SPAWN_Y SPAWN_YAW < <(LC_ALL=C awk -v s="$RANDOM$i" 'BEGIN{srand(s);
+      printf "%.2f %.2f %.2f", -2.4+rand()*0.7, 1.6+rand()*0.8, -0.25+rand()*0.5}')
+    export SPAWN_X SPAWN_Y SPAWN_YAW
+    echo "[campaign] spawn aleatorio: x=$SPAWN_X y=$SPAWN_Y yaw=$SPAWN_YAW"
+  else
+    unset SPAWN_X SPAWN_Y SPAWN_YAW
+  fi
+
+  # --- Simulación (grupo propio con setsid; hereda SPAWN_* exportadas arriba) ---
   echo "[campaign] lanzando simulación (log: $LOGDIR/sim_$i.log)..."
   setsid bash "$SCRIPTS/run_tb4_sim.sh" "$WORLD" >"$LOGDIR/sim_$i.log" 2>&1 &
   SIM_PGID=$!

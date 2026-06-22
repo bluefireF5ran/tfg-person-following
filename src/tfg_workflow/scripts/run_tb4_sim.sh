@@ -26,6 +26,12 @@ export __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-/usr/sh
 # Por defecto, el circuito cerrado con actores que se usa para la demo de seguimiento. Los mundos
 # warehouse_actors*.sdf antiguos (captura de dataset) están archivados en worlds/_archivo/.
 WORLD="${1:-warehouse_unified}"
+# Pose de spawn del robot: por defecto (-2,2,0) ---la usada para grabar el vídeo---, pero
+# configurable por entorno para que la campaña pueda VARIAR el punto de partida en cada ejecución
+# (cada run parte distinta -> repeticiones con sentido estadístico, no el mismo escenario repetido).
+SPAWN_X="${SPAWN_X:--2.0}"
+SPAWN_Y="${SPAWN_Y:-2.0}"
+SPAWN_YAW="${SPAWN_YAW:-0.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCH_DIR="$(cd "$SCRIPT_DIR/../launch" && pwd)"
 WORLDS_DIR="$(cd "$SCRIPT_DIR/../worlds" && pwd)"
@@ -40,7 +46,8 @@ if [[ -f "$WORLDS_DIR/${WORLD}.sdf" ]]; then
   # nacia de espaldas al objetivo y solo lo cazaba de refilon al girar -> casi no lo detectaba.)
   # El dock queda 0.157 m delante (este), pero con safety_override=full los reflejos del
   # Create3 estan desactivados, asi que el robot sale de el como en un undock normal.
-  ros2 launch "$LAUNCH_DIR/sim_with_people.launch.py" world:="$WORLD" x:=-2.0 y:=2.0 yaw:=0.0
+  echo "[INFO] Spawn robot: x=$SPAWN_X y=$SPAWN_Y yaw=$SPAWN_YAW"
+  ros2 launch "$LAUNCH_DIR/sim_with_people.launch.py" world:="$WORLD" x:="$SPAWN_X" y:="$SPAWN_Y" yaw:="$SPAWN_YAW"
 else
   echo "[INFO] Usando mundo del sistema: $WORLD"
   exec ros2 launch turtlebot4_gz_bringup turtlebot4_gz.launch.py world:="$WORLD"
