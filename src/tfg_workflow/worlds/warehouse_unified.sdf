@@ -245,8 +245,21 @@
          Cruza el corredor central en Y (perpendicular al avance del robot) como OTRO posible
          obstaculo de tracking, a ~0.67 m/s, DESFASADO (delay_start) de la "chica de blanco"
          (actor_2), sin meterse en las estanterias.
-         TUNEAR EN GLM: carril x (=5) y delay para que NO coincida con Mingfei en (x,2); si "las 2
-         estanterias" son las del fondo (shelf_3/4), mover el cruce a esa zona. -->
+
+         CRUCE LIMPIO PARA EL VIDEO (los actores de Gazebo NO tienen colision -> si el cruzante
+         coincide en (x,y) con el robot lo ATRAVIESA = clipping feo). Objetivo: que cruce el
+         corredor y=2 POR DELANTE del robot durante el tramo largo. Carril en la ZONA CENTRAL
+         DESPEJADA: x=7, y de -1 a 3. IMPORTANTE evitar el mobiliario: shelf_4 esta en (10,4.5) y
+         shelf_3 en (13.5,4.5), por eso el recorrido NO sube de y=3 (no roza esas estanterias); la
+         CoffeeTable esta en (1.5,5) y shelf_big_3 en (3.5,9.5), lejos de x=7. KNOBS DE AJUSTE FINO
+         (a ojo, viendo la grabacion):
+           - carril x (=7): zona libre es x~[4,8], y~[-1,3]. Subir/bajar para que el cruce caiga
+             delante del robot, no encima. NO pasar de y=4 (estanterias norte) ni a x>=9.
+           - delay_start (=2.0): knob principal de SINCRONIA; +-1..2 s mueve el momento del cruce
+             respecto al paso del robot (que cruce justo cuando el robot lo tiene a la vista).
+           - velocidad (espaciado time<->y de los waypoints): mas rapido = pasa antes y menos tiempo
+             en el corredor. NO ponerlo tan rapido que contradiga el limite de 10 Hz del lazo.
+         Si el cruce no queda limpio en la 1a toma, mover delay_start primero. -->
     <actor name="actor_4">
       <skin>
         <filename>model://actor_male_visitor/meshes/MaleVisitorWalk.dae</filename>
@@ -260,12 +273,16 @@
         <delay_start>2.0</delay_start>
         <auto_start>true</auto_start>
         <trajectory id="0" type="walk">
-          <!-- Cruza el corredor en Y a x=5 (Z=0.90 para pisar el suelo); ~0.67 m/s; obstaculo de tracking -->
-          <waypoint><time>0</time><pose>5 -1 0.90 0 0 1.57</pose></waypoint>
-          <waypoint><time>9</time><pose>5 5 0.90 0 0 1.57</pose></waypoint>    <!-- cruza al OESTE (+y) -->
-          <waypoint><time>10</time><pose>5 5 0.90 0 0 -1.57</pose></waypoint>
-          <waypoint><time>19</time><pose>5 -1 0.90 0 0 -1.57</pose></waypoint> <!-- cruza al ESTE (-y) -->
-          <waypoint><time>20</time><pose>5 -1 0.90 0 0 1.57</pose></waypoint>
+          <!-- Cruza el corredor y=2 a x=7 (Z=0.90 para pisar el suelo); ~0.64 m/s. Recorrido LARGO
+               y=-1..6: se extiende hacia el OESTE (+y), el lado OPUESTO al que gira Mingfei (que gira
+               a -y/Este), para que el periodo sea mayor y CRUCE MENOS VECES el corredor (menos
+               oclusiones del objetivo). x=7 e y<=6 quedan libres de estanterías (shelf_4 en 10,4.5;
+               shelf_3 en 13.5,4.5; ambas a x>=10). -->
+          <waypoint><time>0</time><pose>7 -1 0.90 0 0 1.57</pose></waypoint>
+          <waypoint><time>11</time><pose>7 6 0.90 0 0 1.57</pose></waypoint>   <!-- cruza al OESTE (+y), y=2 a t~4.7 -->
+          <waypoint><time>12</time><pose>7 6 0.90 0 0 -1.57</pose></waypoint>
+          <waypoint><time>23</time><pose>7 -1 0.90 0 0 -1.57</pose></waypoint> <!-- cruza al ESTE (-y), y=2 a t~18.3 -->
+          <waypoint><time>24</time><pose>7 -1 0.90 0 0 1.57</pose></waypoint>
         </trajectory>
       </script>
     </actor>
