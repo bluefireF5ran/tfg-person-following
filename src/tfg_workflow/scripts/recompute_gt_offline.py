@@ -6,7 +6,7 @@
 # MOT a partir de la profundidad y la pose guardadas por
 # `capture_mot_dataset.py --save_depth` (depth/*.png + meta.jsonl por secuencia),
 # SIN volver a lanzar Gazebo. Permite afinar el refinado de cajas (silueta del
-# actor) cuantas veces haga falta de forma offline (feedback iterativo de Eugenio).
+# actor) cuantas veces haga falta de forma offline (feedback iterativo del tutor).
 #
 # Reutiliza exactamente compute_frame_gt() de capture_mot_dataset, así que el GT
 # recomputado es idéntico al que produciría una captura en vivo con esos parámetros.

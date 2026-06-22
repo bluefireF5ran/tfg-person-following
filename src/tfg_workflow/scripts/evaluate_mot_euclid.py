@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0
 #
 # evaluate_mot_euclid.py: Evaluación CLEAR MOT siguiendo el protocolo del TFM de
-# referencia / Eugenio (ROBOT7), que NO usa IoU sino DISTANCIA EUCLÍDEA entre
+# referencia / el tutor (ROBOT7), que NO usa IoU sino DISTANCIA EUCLÍDEA entre
 # centros, con umbral por objeto igual a la SEMIDIAGONAL de la caja GT:
 #     umbral_i = 0.5 * sqrt(w_i^2 + h_i^2)
 # Reporta (py-motmetrics):

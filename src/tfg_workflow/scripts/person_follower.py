@@ -53,7 +53,7 @@ FRONT_HALFWIDTH_M = 0.35
 # no hay profundidad). Escala con la resolución (~400 px a 640x480).
 BBOX_H_AT_TARGET = 400.0
 
-# Fijado del objetivo por proximidad+permanencia (spec de Eugenio).
+# Fijado del objetivo por proximidad+permanencia (spec del tutor).
 ACQUIRE_DWELL_S = 3.0        # s que la persona más cercana debe mantenerse para fijarse
 ACQUIRE_MAX_RANGE = 2.0      # m: solo se considera objetivo si está a <= esta distancia
 ACQUIRE_STILL_TOL_M = 0.7    # m: tolerancia de "quieto" en profundidad (la prof. medida baja
@@ -72,7 +72,7 @@ ACQ_TURN_MAX = 0.6           # rad/s máx. de centrado mientras se adquiere
 ACQ_COAST_S = 1.2            # s tras la última detección en que aún se centra (decayendo)
 
 # Mantenimiento del objetivo (tracking visual por id) ante cruces/oclusiones.
-# CLAVE para "no saltar al que se cruza" (spec de Eugenio): ante un hueco del id del objetivo
+# CLAVE para "no saltar al que se cruza" (spec del tutor): ante un hueco del id del objetivo
 # NO se re-vincula de inmediato (eso permitía que un cruzante en ese frame robara el objetivo).
 # Se COAST hasta que el id REAPAREZCA; solo si la ausencia se SOSTIENE > REBIND_MIN_LOST_S se
 # plantea un re-vínculo, y SOLO a un candidato que esté QUIETO en la posición prevista.
@@ -96,7 +96,7 @@ FOLLOW_LOST_TIMEOUT = 6.0
 # Más corto que FOLLOW_LOST_TIMEOUT: primero se para (suelta lock), luego se re-adquiere.
 LOST_BLIND_STOP_S = 1.5
 
-# Distancia al objetivo por LÁSER (instrucción de Eugenio + método del PDF relacionLaserImagen):
+# Distancia al objetivo por LÁSER (instrucción del tutor + método del PDF relacionLaserImagen):
 # la coordenada X de la caja se traduce a un ÁNGULO del láser (centro imagen = 0°) vía el FOV y
 # se lee el rango del /scan en ese ángulo (`_lidar_range_at_pixel`). Se ACEPTA ese rango como
 # distancia a la persona solo si CORROBORA la profundidad de cámara (|láser - prof| <= esto):
@@ -192,7 +192,7 @@ class PersonFollowerNode(Node):
         self._det_count = 0
         self._locked = False        # True solo cuando el objetivo fijado está visible
 
-        # Estado de fijado/seguimiento del objetivo (spec de Eugenio).
+        # Estado de fijado/seguimiento del objetivo (spec del tutor).
         self.target_id = None       # id BoT-SORT del objetivo fijado (None = adquiriendo)
         self._acq_since = None      # instante en que empezó el dwell del candidato
         self._acq_cx = IMAGE_WIDTH / 2.0   # X del candidato (continuidad espacial, no por id)
@@ -539,7 +539,7 @@ class PersonFollowerNode(Node):
 
     def _on_detections(self, msg: Detection2DArray):
         """Adquisición por proximidad+permanencia y mantenimiento del objetivo por id
-        (tracking visual), según la spec de Eugenio. La distancia viene de la profundidad
+        (tracking visual), según la spec del tutor. La distancia viene de la profundidad
         OAK-D que publica el detector en results[0].pose.pose.position.z."""
         now = self.get_clock().now()
         persons = []
@@ -655,7 +655,7 @@ class PersonFollowerNode(Node):
         self._reset_rebind()
         self._locked = True
         self._det_cx, self._det_bbox_h = tgt['cx'], tgt['h']
-        # DISTANCIA AL OBJETIVO: el LÁSER es la fuente PRINCIPAL (instrucción de Eugenio + PDF):
+        # DISTANCIA AL OBJETIVO: el LÁSER es la fuente PRINCIPAL (instrucción del tutor + PDF):
         # se traduce la X de la caja a un ángulo del láser y se lee la MEDIANA del /scan ahí; la
         # profundidad OAK-D es el RESPALDO. CONSISTENCIA TEMPORAL (clave): el objetivo está a una
         # distancia que cambia DESPACIO; si una medida da un salto brusco respecto a la distancia
@@ -931,7 +931,7 @@ class PersonFollowerNode(Node):
 
 def main():
     parser = argparse.ArgumentParser(description="Safe person-following controller for TurtleBot4")
-    # Defaults alineados con person_follow.launch.py (la consigna de Eugenio): a 3.0 m la OAK-D ve
+    # Defaults alineados con person_follow.launch.py (la consigna del tutor): a 3.0 m la OAK-D ve
     # a la persona entera (a <3 m solo piernas), y 0.6/1.2 son los límites seguros de la demo. Así
     # ejecutar el script suelto se comporta como el launch (que de todas formas los pasa explícitos).
     parser.add_argument("--safe-dist", type=float, default=0.5)

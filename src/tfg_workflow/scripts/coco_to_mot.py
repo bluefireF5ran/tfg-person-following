@@ -4,7 +4,7 @@
 #
 # coco_to_mot.py: Convierte el ground-truth de ROBOT7 en formato COCO (labels.json,
 # exportado de CVAT/FiftyOne) a formato MOTChallenge (gt.txt). La identidad de cada
-# persona viene en annotation['attributes']['name'] (Jose, Miguel, Eugenio, ...).
+# persona viene en annotation['attributes']['name'] (los nombres de las personas anotadas).
 #
 # El nº de frame se asigna por ORDEN ALFABÉTICO del nombre de fichero de imagen
 # (1..N), igual que hace track_boxmot.py al recorrer la carpeta, para que GT y

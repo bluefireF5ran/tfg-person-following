@@ -118,7 +118,7 @@ def _refine_box_depth(depth, x1, y1, x2, y2, actor_depth, near_margin, far_margi
     aunque la proyección geométrica esté desplazada (offset lateral de la malla al
     caminar/correr), y devuelve el bounding box de la silueta. Como la banda de
     profundidad es asimétrica (estricta por detrás), no coge el fondo, así que el
-    ancho resultante es el de la persona (feedback de Eugenio).
+    ancho resultante es el de la persona (feedback del tutor).
     Se ancla en la profundidad ESPERADA del actor (Zo geométrico).
 
     Banda de profundidad ASIMÉTRICA respecto a Zo: generosa hacia la cámara

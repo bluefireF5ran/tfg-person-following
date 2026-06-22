@@ -6,7 +6,7 @@ Runs YOLO with a multi-object tracker (BoT-SORT by default) via Ultralytics
 Publishes ALL tracked persons in a Detection2DArray; the follower decides which one
 is the target (by proximity + dwell). For each person it also publishes the DISTANCE
 measured from the OAK-D depth image at the person's torso (relación distancia↔imagen,
-método del PDF de Eugenio) in ``results[0].pose.pose.position.z``.
+método del PDF del tutor) in ``results[0].pose.pose.position.z``.
 
 NOTE: in this Gazebo sim the 2D LiDAR does NOT see the animated actors (no collision),
 so the per-person range comes from the OAK-D depth camera; the LiDAR is reserved for

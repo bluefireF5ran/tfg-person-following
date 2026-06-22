@@ -68,7 +68,7 @@ DEPTH_FLAG="--use_depth --occ_margin $OCC_MARGIN"
 [[ "${USE_DEPTH:-1}" == "0" ]] && DEPTH_FLAG=""
 
 # Refinado de cajas por profundidad (ON por defecto): ciñe cada caja a la silueta
-# real del actor -> cajas centradas y sin cajas 'vacías' (feedback de Eugenio).
+# real del actor -> cajas centradas y sin cajas 'vacías' (feedback del tutor).
 [[ "${REFINE:-1}" == "1" ]] && DEPTH_FLAG="$DEPTH_FLAG --depth_refine"
 
 # Box por malla (Plan B): si existe el JSON de calibración, se usa.

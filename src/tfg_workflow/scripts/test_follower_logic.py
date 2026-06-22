@@ -11,7 +11,7 @@
 # bbox.center.x/y, bbox.size_x/y, results[0].hypothesis.class_id="person:{id}",
 # results[0].pose.pose.position.z=profundidad) y se controla el reloj con un FakeClock.
 #
-# Cada escenario codifica un requisito de la spec de Eugenio como PASS/FAIL y vuelca un
+# Cada escenario codifica un requisito de la spec del tutor como PASS/FAIL y vuelca un
 # visor textual por frame (posiciones objetivo/cruzante, estado, target_id, v/w).
 #
 # USO (sin colcon, sin pytest; igual que el resto del TFG):
@@ -118,6 +118,7 @@ class Harness:
             "w": self.node.current_angular,
             "dist_source": self.node._dist_source,
             "est_dist": self.node._est_dist,
+            "ctrl_dist": self.node._ctrl_dist,
         }
         self.trace.append(snap)
         return snap
@@ -286,7 +287,7 @@ def sc8_crosser_other_depth(h):
     return ok, f"agarró cruzante a 1.5m={bool(grabbed)} (esperado: no, gate de profundidad)"
 
 
-# ── Distancia al objetivo por LÁSER (instrucción de Eugenio + método del PDF) ──
+# ── Distancia al objetivo por LÁSER (instrucción del tutor + método del PDF) ──
 def scL1_laser_corroborates(h):
     # Caso robot real / objeto colisionable: el láser en el ángulo de la caja CORROBORA la
     # profundidad de cámara -> se usa el LÁSER como distancia (método del PDF).
@@ -317,14 +318,15 @@ def scL3_laser_out_of_bounds_fallback_depth(h):
                 f"(esperado prof ~3.0: láser 15 m fuera de cota)")
 
 
-def scL4_laser_primary_over_unstable_depth(h):
-    # La profundidad OAK-D puede leer el FONDO (valor grande erróneo). El láser es la fuente
-    # PRINCIPAL y se usa aunque NO coincida con la profundidad (que es la fuente inestable).
+def scL4_laser_refines_noisy_depth(h):
+    # La profundidad OAK-D es algo RUIDOSA (3.4 m) pero el láser (3.0 m) la CORROBORA dentro de la
+    # tolerancia (|3.0-3.4| <= LASER_AGREE_M): el láser es la fuente PRINCIPAL (método del PDF) y
+    # AFINA la distancia. (Si discrepara MUCHO, el haz toca otra cosa -> se cae a profundidad: L7.)
     acquire_and_lock(h, cx=320, depth=3.0, tid=1)
-    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 5.0}], laser_at_target=2.8)
-    ok = (s["dist_source"] == "laser" and abs(s["est_dist"] - 2.8) < 0.1)
+    s = h.tick(0.08, [{"id": 1, "cx": 320, "depth": 3.4}], laser_at_target=3.0)
+    ok = (s["dist_source"] == "laser" and abs(s["est_dist"] - 3.0) < 0.1)
     return ok, (f"dist_source={s['dist_source']} est_dist={s['est_dist']:.2f} "
-                f"(esperado láser 2.8, no la profundidad 5.0)")
+                f"(esperado láser 3.0 afinando prof ruidosa 3.4)")
 
 
 # ── Guarda de RETROCESO (P2: "sin chocar" con obstáculos traseros) ──
@@ -476,6 +478,68 @@ def scL5_reject_crosser_in_front(h):
                 f"(esperado hold ~3.0, no la medida del cruzante)")
 
 
+def scL6_unstick_stale_hold(h):
+    # El láser "camina" hacia arriba (rebota en una pared lejana del circuito) y arrastra la
+    # distancia hasta ~9 m en pasos <1 m (cada uno se acepta), mientras el objetivo REAL está a
+    # ~2 m (profundidad). Con la previa anclada en ~9 m, toda lectura real (~2 m) dista >1 m y se
+    # rechaza: sin re-sync el robot se queda CLAVADO en ~9 m y avanza a ciegas (log 17:08). Tras
+    # DIST_HOLD_RESYNC_S debe RE-SINCRONIZAR a ~2 m.
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    for dl in (3.8, 4.6, 5.4, 6.2, 7.0, 7.8, 8.6, 9.0):
+        h.tick(0.1, [{"id": 1, "cx": 320, "depth": 2.0}], laser_at_target=dl)
+    last = None
+    for _ in range(int(1.4 / 0.1)):  # >DIST_HOLD_RESYNC_S manteniendo al objetivo a ~2 m
+        last = h.tick(0.1, [{"id": 1, "cx": 320, "depth": 2.0}], laser_at_target=float("inf"))
+    ok = (last["est_dist"] < 3.0)
+    return ok, (f"est_dist={last['est_dist']:.2f} dist_source={last['dist_source']} "
+                f"(esperado re-sync a ~2.0, no clavado en ~9)")
+
+
+def scL7_wall_in_bearing_uses_depth_no_reverse(h):
+    # FALLO REAL (run 6f6s76od): al final del circuito el láser en el ángulo de la caja lee una
+    # PARED cercana (~0.8 m) mientras el objetivo REAL se ALEJA (profundidad 3->6 m). Confiando en
+    # el láser, dist_error<0 y el robot RETROCEDERÍA (v<0). Con la corroboración láser-prof, el
+    # láser (que discrepa mucho de la profundidad) se DESCARTA y se usa la profundidad: no recula.
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    last = None
+    for d in (3.5, 4.0, 4.5, 5.0, 5.5, 6.0):
+        last = h.tick(0.1, [{"id": 1, "cx": 320, "depth": d}], laser_at_target=0.8)
+    ok = (last["dist_source"] != "laser" and last["est_dist"] > 2.5 and last["v"] >= -1e-6)
+    return ok, (f"dist_source={last['dist_source']} est_dist={last['est_dist']:.2f} "
+                f"v={last['v']:.3f} (esperado: NO láser, ~prof lejana, v>=0 sin recular)")
+
+
+def scV1_distance_ema_smooths_control(h):
+    # La distancia entra con JITTER (3.0<->3.6, saltos <DIST_MAX_STEP_M, así que se ACEPTAN): sin
+    # suavizado, la distancia de control oscilaría 0.6 m y la velocidad daría acelerones/retrocesos
+    # que descentran y pierden al objetivo (lo que el usuario observó con el láser activo). El EMA
+    # debe reducir bastante el rango de la distancia de control.
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    cds = []
+    for d in (3.6, 3.0, 3.6, 3.0, 3.6, 3.0, 3.6, 3.0):
+        s = h.tick(0.1, [{"id": 1, "cx": 320, "depth": d}], laser_at_target=float("inf"))
+        cds.append(s["ctrl_dist"])
+    rng = max(cds) - min(cds)
+    ok = (rng < 0.3)   # entrada oscila 0.6 m; el EMA lo deja a la mitad o menos
+    return ok, f"rango ctrl_dist={rng:.3f} m (entrada 0.6; esperado <0.3 por el EMA)"
+
+
+def scV2_detector_silent_stops_no_blind_drive(h):
+    # SEGURIDAD: el detector deja de publicar (se cayó) mientras el objetivo está fijado y alejado
+    # (~4.5 m, querría AVANZAR). Sin arreglo, el follower seguía a 0.6 m/s con la distancia
+    # congelada (caso real: 38 s a ciegas). Tras LOST_BLIND_STOP_S sin detecciones debe SOLTAR el
+    # lock y PARAR (des_linear<=0).
+    acquire_and_lock(h, cx=320, depth=3.0, tid=1)
+    for d in (3.5, 4.0, 4.5):                       # el objetivo se aleja (locked, querría avanzar)
+        h.tick(0.1, [{"id": 1, "cx": 320, "depth": d}], laser_at_target=float("inf"))
+    last = None
+    for _ in range(int(2.5 / 0.1)):                 # detector MUDO >LOST_BLIND_STOP_S
+        last = h.tick(0.1, None, front=float("inf"))
+    ok = (not last["locked"] and last["v"] <= 1e-6)
+    return ok, (f"locked={last['locked']} v={last['v']:.3f} "
+                f"(esperado: suelta lock y v<=0, no avanza a ciegas con dist congelada)")
+
+
 def scR3_stuck_unstuck_rotates_no_reverse(h):
     # Atascado por obstáculo frontal >3 s: el desatasco SOLO gira en el sitio (v=0, w!=0), NO
     # retrocede — ni siquiera con la trasera DESPEJADA (el retroceso ciego chocaba).
@@ -512,6 +576,54 @@ def scR4_no_reverse_within_deadband(h):
     return ok, f"v={s['v']:.3f} a 2.7m (esperado >=0: banda muerta, no retrocede por poco)"
 
 
+# ── Tests para helpers PUROS de la capa LiDAR ──────────────────
+def scH1_yaw_deg_from_quat(h):
+    from geometry_msgs.msg import Quaternion
+    cases = []
+    for deg in (0, 90, 180, 270):
+        half = math.radians(deg) * 0.5
+        q = Quaternion(w=math.cos(half), x=0.0, y=0.0, z=math.sin(half))
+        result = pf.PersonFollowerNode._yaw_deg_from_quat(q)
+        cases.append((deg, result))
+    ok = all(abs(r - d) < 1.0 for d, r in cases)
+    details = " ".join(f"{d}°->{r:.1f}°" for d, r in cases)
+    return ok, details
+
+
+def scH2_median_range_to_bearing(h):
+    pts = [(0.0, 0.0, d, float(ang)) for ang, d in
+           [(0, 2.0), (45, 3.0), (90, 4.0), (180, 5.0), (270, 6.0)]]
+    r0 = pf.PersonFollowerNode._median_range_to_bearing(pts, 0.0)
+    r45 = pf.PersonFollowerNode._median_range_to_bearing(pts, 45.0)
+    r_wide = pf.PersonFollowerNode._median_range_to_bearing(pts, 91.0)
+    r_none = pf.PersonFollowerNode._median_range_to_bearing(pts, 999.0)
+    ok = (abs(r0 - 2.0) < 0.01 and abs(r45 - 3.0) < 0.01
+          and abs(r_wide - 4.0) < 0.01 and math.isinf(r_none))
+    return ok, f"0°->{r0} 45°->{r45} 91°(win=4, esperado 90->4.0)={r_wide} 999°->{r_none}"
+
+
+def scH3_frontal_min_filter(h):
+    # El corredor frontal (helper real _frontal_min_in_corridor) solo cuenta puntos POR DELANTE
+    # (x>AHEAD_X_M) y dentro del ancho del robot (|y|<=FRONT_HALFWIDTH_M): ignora los de detrás,
+    # los demasiado cercanos al eje pero a un lado, y sobre todo los LATERALES (cruzante que pasa
+    # al costado) que un x>0.40 a secas contaría como frontales por su distancia euclídea.
+    # El punto LATERAL está más CERCA (d=0.602) que el del corredor (d=0.608): un criterio x>0.40
+    # a secas devolvería 0.602 (frenaría por el cruzante de al lado); el corredor lo descarta y
+    # devuelve 0.608. Así el test DISTINGUE corredor de "x>0.40 a secas".
+    d_lat = math.hypot(0.45, 0.40)    # 0.602; |y|=0.40 > FRONT_HALFWIDTH_M -> fuera del corredor
+    d_cor = math.hypot(0.60, 0.10)    # 0.608; |y|=0.10 -> dentro del corredor (el válido más cercano)
+    pts = [
+        (0.38, 0.00, 0.38, 0.0),      # x<AHEAD_X_M -> ignorado
+        (-0.50, 0.00, 0.50, 180.0),   # detrás -> ignorado
+        (0.45, 0.40, d_lat, 42.0),    # lateral más cercano -> DEBE ignorarse
+        (0.60, 0.10, d_cor, 9.0),     # corredor -> el mínimo válido
+    ]
+    fmin = pf.PersonFollowerNode._frontal_min_in_corridor(pts)
+    ok = abs(fmin - d_cor) < 0.01
+    return ok, (f"frontal_min={fmin:.3f} (esperado {d_cor:.3f}: corredor; ignora x<{pf.AHEAD_X_M}, "
+                f"detrás, y el lateral más cercano |y|>{pf.FRONT_HALFWIDTH_M})")
+
+
 SCENARIOS = [
     ("1. Adquirir y fijar", sc1_acquire),
     ("2. No fijar antes de 3s", sc2_no_early_lock),
@@ -525,8 +637,12 @@ SCENARIOS = [
     ("L1. Distancia por LASER cuando corrobora la profundidad (PDF)", scL1_laser_corroborates),
     ("L2. Laser no ve al actor (inf) -> cae a profundidad", scL2_laser_inf_fallback_depth),
     ("L3. Laser implausible (fuera de cota) -> cae a profundidad", scL3_laser_out_of_bounds_fallback_depth),
-    ("L4. Laser PRINCIPAL aunque la profundidad (inestable) discrepe", scL4_laser_primary_over_unstable_depth),
+    ("L4. Laser PRINCIPAL afina la profundidad ruidosa cuando corrobora", scL4_laser_refines_noisy_depth),
     ("L5. Cruzante/pilar delante -> rechaza el salto y MANTIENE (no recula)", scL5_reject_crosser_in_front),
+    ("L6. Distancia clavada (hold obsoleto) -> RE-SINCRONIZA tras 1s (no avanza a ciegas)", scL6_unstick_stale_hold),
+    ("L7. Pared cercana en el bearing del objetivo -> usa profundidad, NO retrocede", scL7_wall_in_bearing_uses_depth_no_reverse),
+    ("V1. Jitter de distancia -> el EMA suaviza la distancia de control (no pierde el objetivo)", scV1_distance_ema_smooths_control),
+    ("V2. Detector mudo (caído) -> suelta lock y PARA, no avanza a ciegas (seguridad)", scV2_detector_silent_stops_no_blind_drive),
     ("9. Evitacion activa con objetivo centrado -> NO pierde lock (P1)", sc9_avoidance_keeps_target_locked),
     ("10. Evitacion con objetivo descentrado -> NO pierde lock (P1)", sc10_avoidance_offcenter_target_stays_locked),
     ("11. Rebind con depth gate escalado tras occlusion larga (P1)", sc11_rebind_scaled_depth_after_occlusion),
@@ -538,6 +654,9 @@ SCENARIOS = [
     ("R3. Desatasco STOPPED -> gira en el sitio, NO recula (P2)", scR3_stuck_unstuck_rotates_no_reverse),
     ("R4. Objetivo un poco cerca (banda muerta) -> NO retrocede (P2)", scR4_no_reverse_within_deadband),
     ("A. Frenado progresivo ante obstaculo frontal (no embestir el pilar)", scA_progressive_slow_near_obstacle),
+    ("H1. Yaw desde quaternion (0/90/180/270°)", scH1_yaw_deg_from_quat),
+    ("H2. Mediana de rango en bearing con nube sintética", scH2_median_range_to_bearing),
+    ("H3. Corredor frontal: ignora x<AHEAD_X_M, traseros y laterales |y|>FRONT_HALFWIDTH_M", scH3_frontal_min_filter),
 ]
 
 
