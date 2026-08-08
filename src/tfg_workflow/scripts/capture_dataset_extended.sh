@@ -218,5 +218,4 @@ echo "Next steps:"
 echo "  1. Verify GT:    python3 scripts/verify_gt.py --data_dir $DATA_DIR"
 echo "  2. Prepare YOLO: python3 scripts/prepare_yolo_dataset.py --images_dir $DATA_DIR/images --labels_dir $DATA_DIR/labels --output_dir ../data/yolo_dataset_extended"
 echo "  3. Train:        python3 scripts/train_yolo.py --data ../data/yolo_dataset_extended/data.yaml --model yolo11s.pt"
-</task_progress>
-</write_to_file>
+

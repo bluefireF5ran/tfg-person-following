@@ -1,10 +1,11 @@
 #!/bin/bash
 # Script para ejecutar el circuito de testing controlado
 # PERFECTO para defensa del TFG
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 
 set -e
 
-WORKSPACE_ROOT="/home/francisco/tfg_ws"
+WORKSPACE_ROOT="${TFG_WS}"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  🧪 CIRCUITO DE TESTING - DEFENSA TFG                       ║"
@@ -41,7 +42,7 @@ echo ""
 echo "✅ Circuito de testing iniciado"
 echo ""
 echo "💡 Para ejecutar person-following:"
-echo "   cd /home/francisco/tfg_ws/src/tfg_workflow"
+echo "   cd ${TFG_WS}/src/tfg_workflow"
 echo "   bash scripts/run_pipeline.sh follow-launch"
 echo ""
 echo "🎯 El agente seguirá un circuito rectangular predecible"

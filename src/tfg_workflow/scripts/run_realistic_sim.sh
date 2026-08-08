@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script para ejecutar simulación con mundo visualmente mejorado
 # Uso: bash run_realistic_sim.sh
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 
 set -e
 
@@ -24,7 +25,7 @@ echo ""
 cd "$WORKSPACE_DIR"
 
 # Source workspace - navegar al directorio correcto
-WORKSPACE_ROOT="/home/francisco/tfg_ws"
+WORKSPACE_ROOT="${TFG_WS}"
 if [ -f "$WORKSPACE_ROOT/install/setup.bash" ]; then
     source "$WORKSPACE_ROOT/install/setup.bash"
     cd "$WORKSPACE_ROOT"

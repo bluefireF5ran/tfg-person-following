@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,8 +54,8 @@ case "$cmd" in
   check-scan)
     set +u
     source /opt/ros/jazzy/setup.bash
-    if [[ -f "/home/francisco/tfg_ws/install/setup.bash" ]]; then
-      source /home/francisco/tfg_ws/install/setup.bash
+    if [[ -f "${TFG_WS}/install/setup.bash" ]]; then
+      source ${TFG_WS}/install/setup.bash
     fi
     set -u
     ros2 topic echo /scan --once
@@ -65,16 +66,16 @@ case "$cmd" in
     ;;
 
   capture)
-    PYTHON_BIN="/home/francisco/tfg_ws/.venv/bin/python"
+    PYTHON_BIN="${TFG_WS}/.venv/bin/python"
     if [[ ! -x "$PYTHON_BIN" ]]; then
-      echo "[ERROR] No existe Python venv en /home/francisco/tfg_ws/.venv"
+      echo "[ERROR] No existe Python venv en ${TFG_WS}/.venv"
       exit 1
     fi
 
     set +u
     source /opt/ros/jazzy/setup.bash
-    if [[ -f "/home/francisco/tfg_ws/install/setup.bash" ]]; then
-      source /home/francisco/tfg_ws/install/setup.bash
+    if [[ -f "${TFG_WS}/install/setup.bash" ]]; then
+      source ${TFG_WS}/install/setup.bash
     fi
     set -u
 

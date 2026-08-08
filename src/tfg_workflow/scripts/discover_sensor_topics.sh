@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 set -euo pipefail
 
 set +u
 source /opt/ros/jazzy/setup.bash
-if [[ -f "/home/francisco/tfg_ws/install/setup.bash" ]]; then
-  source /home/francisco/tfg_ws/install/setup.bash
+if [[ -f "${TFG_WS}/install/setup.bash" ]]; then
+  source ${TFG_WS}/install/setup.bash
 fi
 set -u
 

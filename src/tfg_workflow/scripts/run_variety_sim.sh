@@ -1,10 +1,11 @@
 #!/bin/bash
 # Script para ejecutar simulación con variedad de actores
 # Mejora el realismo visual con diferentes alturas y comportamientos
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 
 set -e
 
-WORKSPACE_ROOT="/home/francisco/tfg_ws"
+WORKSPACE_ROOT="${TFG_WS}"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  👥 SIMULACIÓN CON VARIEDAD DE ACTORES                       ║"
@@ -51,6 +52,6 @@ echo "   - La pareja conversando (Actors 3-5) ahora tiene contexto"
 echo "   - Mayor diversidad visual = mayor realismo"
 echo ""
 echo "🔧 Para ejecutar person-following:"
-echo "   cd /home/francisco/tfg_ws/src/tfg_workflow"
+echo "   cd ${TFG_WS}/src/tfg_workflow"
 echo "   bash scripts/run_pipeline.sh follow-launch"
 echo ""

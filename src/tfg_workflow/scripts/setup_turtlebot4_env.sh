@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 set -euo pipefail
 
 echo "[INFO] Configuración recomendada para TurtleBot4 + ROS 2 Jazzy + Gazebo Harmonic"
 
 ROS_SETUP="/opt/ros/jazzy/setup.bash"
-WS_SETUP="/home/francisco/tfg_ws/install/setup.bash"
+WS_SETUP="${TFG_WS}/install/setup.bash"
 
 if [[ ! -f "$ROS_SETUP" ]]; then
   echo "[ERROR] No existe $ROS_SETUP"
@@ -37,7 +38,7 @@ echo ""
 echo "[INFO] Para persistir en ~/.bashrc añade:"
 cat <<'EOF'
 source /opt/ros/jazzy/setup.bash
-source /home/francisco/tfg_ws/install/setup.bash
+source ${TFG_WS}/install/setup.bash
 export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export __NV_PRIME_RENDER_OFFLOAD=1

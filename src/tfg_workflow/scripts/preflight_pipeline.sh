@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,8 +12,8 @@ command -v nvidia-smi >/dev/null && echo "  OK nvidia-smi" || echo "  WARN nvidi
 echo "[2/4] ROS packages TurtleBot4"
 set +u
 source /opt/ros/jazzy/setup.bash
-if [[ -f "/home/francisco/tfg_ws/install/setup.bash" ]]; then
-  source /home/francisco/tfg_ws/install/setup.bash
+if [[ -f "${TFG_WS}/install/setup.bash" ]]; then
+  source ${TFG_WS}/install/setup.bash
 fi
 set -u
 

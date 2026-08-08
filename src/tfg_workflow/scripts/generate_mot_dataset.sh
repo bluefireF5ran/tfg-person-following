@@ -22,13 +22,14 @@
 #     HALF_WIDTH   semiancho del box 3D del actor (def. 0.18, cajas ceñidas)
 #     NO_DRAW=1    desactiva el guardado de imágenes de verificación
 # ===========================================================================
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 set -euo pipefail
 
 # ── Entorno ROS 2 ──────────────────────────────────────────────────────────
 set +u
 source /opt/ros/jazzy/setup.bash
-if [[ -f "/home/francisco/tfg_ws/install/setup.bash" ]]; then
-  source /home/francisco/tfg_ws/install/setup.bash
+if [[ -f "${TFG_WS}/install/setup.bash" ]]; then
+  source ${TFG_WS}/install/setup.bash
 fi
 set -u
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"

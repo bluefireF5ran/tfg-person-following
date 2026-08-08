@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script para comparar visualmente ambos mundos
 # Uso: bash compare_sims.sh
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 
 set -e
 
@@ -17,12 +18,12 @@ echo ""
 echo "🚀 Opciones de ejecución:"
 echo ""
 echo "1. Ejecutar MUNDO ORIGINAL (lento, sin sombras):"
-echo "   cd /home/francisco/tfg_ws"
+echo "   cd ${TFG_WS}"
 echo "   source install/setup.bash"
 echo "   ros2 launch src/tfg_workflow/launch/sim_with_people.launch.py world:=warehouse_actors"
 echo ""
 echo "2. Ejecutar MUNDO REALISTA (velocidad normal, con sombras):"
-echo "   cd /home/francisco/tfg_ws/src/tfg_workflow"
+echo "   cd ${TFG_WS}/src/tfg_workflow"
 echo "   bash scripts/run_realistic_sim.sh"
 echo ""
 echo "💡 Recomendación:"
@@ -31,11 +32,11 @@ echo "   comparar en tiempo real las diferencias visuales."
 echo ""
 echo "🎯 Para test person-following con el mundo realista:"
 echo "   # Terminal 1: Iniciar simulación realista"
-echo "   cd /home/francisco/tfg_ws/src/tfg_workflow"
+echo "   cd ${TFG_WS}/src/tfg_workflow"
 echo "   bash scripts/run_realistic_sim.sh"
 echo ""
 echo "   # Terminal 2: Ejecutar person-following"
-echo "   cd /home/francisco/tfg_ws/src/tfg_workflow"
+echo "   cd ${TFG_WS}/src/tfg_workflow"
 echo "   bash scripts/run_pipeline.sh follow-launch"
 echo ""
 echo "════════════════════════════════════════════════════════════════"
@@ -46,7 +47,7 @@ read -r response
 if [[ "$response" =~ ^([sS][iI]|[sS]|y|yes)$ ]]; then
     echo ""
     echo "🚀 Iniciando mundo realista..."
-    cd /home/francisco/tfg_ws/src/tfg_workflow
+    cd ${TFG_WS}/src/tfg_workflow
     bash scripts/run_realistic_sim.sh
 else
     echo ""

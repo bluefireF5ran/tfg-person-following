@@ -17,6 +17,7 @@
 # Necesita display (Gazebo con GUI) y GPU. Deja esta terminal a la vista: verás el arranque de
 # Gazebo y, cuando publique la cámara, el lanzamiento del seguimiento. Logs en
 # logs_campaign/run_AAAAMMDD_HHMMSS/ (una subcarpeta nueva por cada invocación).
+: "${TFG_WS:=$HOME/tfg_ws}"   # raiz del workspace; exportala si usas otra
 
 set -u
 N="${1:-3}"
@@ -34,7 +35,7 @@ RANDOMIZE_SPAWN="${RANDOMIZE_SPAWN:-1}"
 WORLD="${WORLD:-warehouse_unified}"
 CAM_TOPIC="/oakd/rgb/preview/image_raw"   # tópico que confirma que Gazebo + sensores están vivos
 
-ROOT="/home/francisco/tfg_ws"
+ROOT="${TFG_WS}"
 SCRIPTS="$ROOT/src/tfg_workflow/scripts"
 LAUNCH="$ROOT/src/tfg_workflow/launch"
 # Subcarpeta propia por invocación (con fecha/hora): así los logs de campañas anteriores NO se
