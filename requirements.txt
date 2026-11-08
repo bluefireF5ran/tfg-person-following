@@ -1,0 +1,10 @@
+# Python packages used by the scripts in src/tfg_workflow/scripts.
+# ROS 2 packages (rclpy, cv_bridge, sensor_msgs, ...) come from the ROS 2 Jazzy install, not pip.
+# Versions are not pinned yet.
+ultralytics      # YOLO11 detection and training
+boxmot           # StrongSORT, BoT-SORT, ByteTrack, OCSORT, DeepOCSORT
+motmetrics       # CLEAR MOT evaluation
+wandb            # optional telemetry for the follower
+numpy
+pandas
+matplotlib

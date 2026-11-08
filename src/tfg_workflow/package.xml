@@ -2,8 +2,8 @@
 <package format="3">
   <name>tfg_workflow</name>
   <version>0.1.0</version>
-  <description>TFG worklow: YOLO person following with TurtleBot 4</description>
-  <maintainer email="francisco@tfg.xyz">Francisco</maintainer>
+  <description>TFG workflow: YOLO person following with a simulated TurtleBot 4</description>
+  <maintainer email="pacomerchanc@gmail.com">Francisco Merchán Cordero</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

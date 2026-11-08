@@ -75,8 +75,8 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Francisco',
-    maintainer_email='francisco@tfg.xyz',
+    maintainer='Francisco Merchán Cordero',
+    maintainer_email='pacomerchanc@gmail.com',
     description='TFG workflow package',
     license='MIT',
 )
