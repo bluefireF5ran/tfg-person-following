@@ -31,8 +31,9 @@ behaviour over 117 simulated runs logged to Weights & Biases with the simulation
 
 ## The main decision: the chosen tracker is not the one with the best MOTA
 
-Five multi-object trackers, evaluated on **ROBOT7**: four real video sequences of people being
-followed, not simulation. Matching is by Euclidean distance between centres with a per-box
+Five multi-object trackers, evaluated on **ROBOT7**: four real video sequences recorded from a
+PeopleBot mobile robot in an indoor room, supplied by the project advisor. This is the only real
+data in the project. Matching is by Euclidean distance between centres with a per-box
 threshold of half its diagonal.
 
 | Tracker | TP | FP | MISS | ID switches | MOTA | MOTP (px) |
@@ -100,7 +101,8 @@ why the behaviour is evaluated as well as the detector.
 **Which weights run live.** `person_follow.launch.py` defaults to the stock COCO `yolo11s.pt`
 for live following. The OAK-D camera is mounted low and at the 3 m following distance it often
 cuts the target off at the head; the retrained `yolo11s_100ep.pt` is tuned to the warehouse
-dataset and detects those partial views worse. Pass `model:=` to switch.
+dataset and detects those partial views worse. The 117 behaviour runs below used the COCO
+weights; the campaign logs record the model loaded on every launch. Pass `model:=` to switch.
 
 ---
 

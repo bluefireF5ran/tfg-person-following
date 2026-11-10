@@ -1,10 +1,14 @@
-# Python packages used by the scripts in src/tfg_workflow/scripts.
+# Python packages used by the scripts in src/tfg_workflow/scripts, at the versions of the
+# environment the experiments ran in (Ubuntu 24.04, Python 3.12.3, ROS 2 Jazzy).
 # ROS 2 packages (rclpy, cv_bridge, sensor_msgs, ...) come from the ROS 2 Jazzy install, not pip.
-# Versions are not pinned yet.
-ultralytics      # YOLO11 detection and training
-boxmot           # StrongSORT, BoT-SORT, ByteTrack, OCSORT, DeepOCSORT
-motmetrics       # CLEAR MOT evaluation
-wandb            # optional telemetry for the follower
-numpy
-pandas
-matplotlib
+# numpy stays on 1.x: the cv_bridge shipped with Jazzy is built against Ubuntu's numpy 1.26.
+ultralytics==8.4.21   # YOLO11 detection and training
+torch==2.10.0
+torchvision==0.25.0
+boxmot==20.0.0        # StrongSORT, BoT-SORT, ByteTrack, OCSORT, DeepOCSORT
+motmetrics==1.4.0     # CLEAR MOT evaluation
+opencv-python==4.13.0.92
+wandb==0.26.1         # optional telemetry for the follower
+numpy==1.26.4
+pandas==2.3.3
+matplotlib==3.10.8
